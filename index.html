@@ -592,6 +592,98 @@
     commit();
   }
 
+  // ---------- Operator profile ----------
+  const LOCAL_OPERATOR_KEY = 'dhl.operator.name';
+  function localOperatorName() { try { return localStorage.getItem(LOCAL_OPERATOR_KEY) || ''; } catch (e) { return ''; } }
+  function providerLabel() {
+    if (!currentUser || !currentUser.providerData || !currentUser.providerData.length) return '—';
+    const id = currentUser.providerData[0].providerId;
+    return id === 'password' ? 'Email e password' : (id === 'google.com' ? 'Google' : id);
+  }
+  function isPasswordUser() {
+    return !!(currentUser && currentUser.providerData && currentUser.providerData.some((p) => p.providerId === 'password'));
+  }
+  function fmtMeta(t) { if (!t) return '—'; const d = new Date(t); return isNaN(d) ? '—' : d.toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  function profileMsg(text, kind) {
+    const el = document.getElementById('pf-msg'); if (!el) return;
+    el.textContent = text;
+    el.className = 'rounded-xl px-3 py-2 text-xs font-medium ' + (kind === 'ok'
+      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200'
+      : 'bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-200');
+  }
+  function infoRow(label, value) {
+    return '<div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3">' +
+      '<p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
+      '<p class="mt-0.5 break-words text-sm font-medium text-slate-700">' + escapeHtml(value) + '</p></div>';
+  }
+
+  function openProfileModal() {
+    const cloud = fbEnabled && currentUser;
+    const label = cloud ? (currentUser.displayName || currentUser.email || 'Utente') : (localOperatorName() || 'Operatore');
+    const initial = (label[0] || '?').toUpperCase();
+    const head =
+      '<div class="flex items-center justify-between border-b border-slate-100 p-5">' +
+        '<div class="flex items-center gap-2"><i data-lucide="user-cog" class="h-5 w-5 text-indigo-500"></i><h3 class="text-base font-bold text-slate-900">Profilo Operatore</h3></div>' +
+        '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
+      '</div>';
+    const avatar =
+      '<div class="flex items-center gap-3">' +
+        '<span class="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-lg font-bold text-white">' + escapeHtml(initial) + '</span>' +
+        '<div class="min-w-0"><p class="truncate text-sm font-bold text-slate-900">' + escapeHtml(label) + '</p>' +
+        '<p class="truncate text-xs text-slate-500">' + escapeHtml(cloud ? (currentUser.email || '—') : 'Sessione locale (nessun account cloud)') + '</p></div>' +
+      '</div>';
+
+    let body, footer;
+    if (cloud) {
+      body =
+        avatar +
+        '<div id="pf-msg" class="hidden"></div>' +
+        '<div>' + inputField('pf-name', 'Nome visualizzato', 'Es. Giulia Ferraro') + '</div>' +
+        '<div class="grid grid-cols-2 gap-2.5">' +
+          infoRow('Metodo di accesso', providerLabel()) +
+          infoRow('ID utente', currentUser.uid ? currentUser.uid.slice(0, 10) + '…' : '—') +
+          infoRow('Account creato', fmtMeta(currentUser.metadata && currentUser.metadata.creationTime)) +
+          infoRow('Ultimo accesso', fmtMeta(currentUser.metadata && currentUser.metadata.lastSignInTime)) +
+        '</div>' +
+        (isPasswordUser()
+          ? '<button data-action="reset-password" class="flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50"><i data-lucide="key-round" class="h-4 w-4"></i>Reimposta password via email</button>'
+          : '<p class="text-xs text-slate-400">Accesso tramite ' + escapeHtml(providerLabel()) + ': la password è gestita dal provider.</p>');
+      footer =
+        '<button data-action="logout" class="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"><i data-lucide="log-out" class="h-4 w-4"></i>Esci</button>' +
+        '<button data-action="save-profile" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>Salva nome</button>';
+    } else {
+      body =
+        avatar +
+        '<div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-3 text-xs text-amber-800">Sei in <b>modalità demo locale</b>: non esiste un account cloud, quindi non sono disponibili email di accesso, reset password o sincronizzazione. Puoi comunque impostare il nome operatore usato in locale.</div>' +
+        '<div id="pf-msg" class="hidden"></div>' +
+        '<div>' + inputField('pf-name', 'Nome operatore (locale)', 'Es. Mario Rossi') + '</div>';
+      footer =
+        '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">Chiudi</button>' +
+        '<button data-action="save-profile" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>Salva nome</button>';
+    }
+    modalShell(head + '<div class="space-y-4 p-5">' + body + '</div>' + '<div class="flex justify-between gap-2 border-t border-slate-100 p-5">' + footer + '</div>');
+    const el = document.getElementById('pf-name');
+    if (el) { el.value = cloud ? (currentUser.displayName || '') : localOperatorName(); el.focus(); }
+  }
+
+  function saveProfile() {
+    const name = fieldVal('pf-name');
+    if (fbEnabled && currentUser) {
+      currentUser.updateProfile({ displayName: name })
+        .then(() => { profileMsg('Nome aggiornato.', 'ok'); render(); })
+        .catch((e) => profileMsg(translateAuthError(e), 'err'));
+    } else {
+      try { localStorage.setItem(LOCAL_OPERATOR_KEY, name); } catch (e) { /* ignore */ }
+      profileMsg('Nome operatore salvato in locale.', 'ok');
+    }
+  }
+  function sendPasswordReset() {
+    if (!auth || !currentUser || !currentUser.email) return;
+    auth.sendPasswordResetEmail(currentUser.email)
+      .then(() => profileMsg('Email di reimpostazione inviata a ' + currentUser.email + '.', 'ok'))
+      .catch((e) => profileMsg(translateAuthError(e), 'err'));
+  }
+
   // =====================================================================================
   //  RENDER LAYER
   // =====================================================================================
@@ -659,14 +751,14 @@
 
   function userCluster() {
     if (fbEnabled && currentUser) {
-      const label = currentUser.email || currentUser.displayName || 'Utente';
+      const label = currentUser.displayName || currentUser.email || 'Utente';
       const initial = (label[0] || '?').toUpperCase();
       return '<div class="flex items-center gap-2 border-l border-slate-200 pl-2.5">' +
-        '<span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white" data-tooltip="' + escapeHtml(label) + '">' + escapeHtml(initial) + '</span>' +
+        '<button data-action="open-profile" class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white transition hover:ring-2 hover:ring-indigo-200" data-tooltip="' + escapeHtml(label) + ' — Profilo">' + escapeHtml(initial) + '</button>' +
         '<button data-action="logout" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="log-out" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">Esci</span></button>' +
       '</div>';
     }
-    return '<span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500" data-tooltip="Configura Firebase per attivare login e DB cloud"><i data-lucide="hard-drive" class="h-3.5 w-3.5"></i>Demo locale</span>';
+    return '<button data-action="open-profile" class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-200" data-tooltip="Profilo operatore (modalità demo locale)"><i data-lucide="hard-drive" class="h-3.5 w-3.5"></i>Demo locale</button>';
   }
 
   function demoBanner() {
@@ -1179,7 +1271,7 @@
     try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
     catch (e) { showAuthError(translateAuthError(e)); }
   }
-  async function doLogout() { if (auth) { try { await auth.signOut(); } catch (e) { /* ignore */ } } }
+  async function doLogout() { closeModal(); if (auth) { try { await auth.signOut(); } catch (e) { /* ignore */ } } }
 
   // =====================================================================================
   //  FIREBASE INIT + REMOTE STATE
@@ -1362,6 +1454,9 @@
       case 'open-add-doc': openAddDocModal(t.getAttribute('data-nurse')); break;
       case 'create-doc': createDocFromForm(); break;
       case 'close-modal': closeModal(); break;
+      case 'open-profile': openProfileModal(); break;
+      case 'save-profile': saveProfile(); break;
+      case 'reset-password': sendPasswordReset(); break;
     }
   });
 
