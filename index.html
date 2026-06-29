@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NurseFlow · Gestionale Trasferimento Infermieri</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase (compat SDK — works in a single file). App runs in local demo mode until FIREBASE_CONFIG is filled. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          keyframes: {
+            fadeIn: { '0%': { opacity: '0', transform: 'translateY(6px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            pulseSoft: { '0%,100%': { opacity: '1' }, '50%': { opacity: '.45' } },
+          },
+          animation: {
+            fadeIn: 'fadeIn .28s ease-out',
+            pulseSoft: 'pulseSoft 1.8s ease-in-out infinite',
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; background-clip: content-box; }
+    [data-tooltip] { position: relative; }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      background: #0f172a; color: #fff; padding: 6px 10px; border-radius: 8px;
+      font-size: 11px; font-weight: 500; white-space: nowrap; z-index: 50; pointer-events: none;
+      box-shadow: 0 8px 24px rgba(15,23,42,.25);
+    }
+    /* Interactive guided tour */
+    #tour-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+    #tour-hole {
+      position: fixed; border-radius: 14px; border: 2px solid #818cf8;
+      box-shadow: 0 0 0 9999px rgba(15, 23, 42, .62); transition: all .25s ease; pointer-events: none; opacity: 0;
+    }
+    #tour-card {
+      position: fixed; max-width: 340px; background: #fff; border-radius: 16px; padding: 18px;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, .38); opacity: 0; pointer-events: auto; z-index: 61;
+      transition: opacity .2s ease, top .22s ease, left .22s ease;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased">
+  <div id="app"></div>
+
+  <script>
+  // =====================================================================================
+  //  NurseFlow — Gestionale Trasferimento Infermieri (Repubblica Dominicana → Italia)
+  //  Single-file reactive app · Vanilla ES6+ · Tailwind + Lucide
+  //  Persistence: Firebase Firestore (per-user cloud DB) + localStorage cache/fallback
+  //  Auth: Firebase Authentication (email/password + Google). Local demo mode if unset.
+  // =====================================================================================
+
+  // ---------- Firebase configuration ----------
+  // 1. Crea un progetto su https://console.firebase.google.com
+  // 2. Abilita Authentication → metodi "Email/Password" e "Google".
+  // 3. Crea un database Firestore (modalità produzione) e incolla le regole indicate nel README.
+  // 4. In "Impostazioni progetto" → "Le tue app" copia il config e incollalo qui sotto.
+  // Finché apiKey resta vuota, l'app gira in MODALITÀ DEMO LOCALE (solo localStorage, nessun login).
+  const FIREBASE_CONFIG = {
+   apikey: "AIzaSyAiaQihBKt7TPs3feQ2BvtAahiJUocmkqk",
+authDomain: "dominicahealthlink.firebaseapp.com"
+projectId: "dominicahealthlink",
+storageBucket: "dominicahealthlink.firebasestorage.app", messagingSenderId: "88621070016",
+appId: "1:88621070016:web: 218cad6b8da9c7027e5f25"
+  };
+
+  // Firebase runtime handles (populated only when configured).
+  let fbEnabled = false, auth = null, db = null, currentUser = null;
+  let remoteSaveTimer = null, tourAutoChecked = false;
+
+  function firebaseConfigured() {
+    return typeof firebase !== 'undefined' && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.trim().length > 0;
+  }
+
+  // ---------- Constants: the 11 sequential workflow states ----------
+  const STEPS = [
+    { id: 1,  name: 'Candidato acquisito',     short: 'Acquisito' },
+    { id: 2,  name: 'Documenti mancanti',      short: 'Documenti' },
+    { id: 3,  name: 'Documenti verificati',    short: 'Verificati' },
+    { id: 4,  name: 'Pratica inviata',         short: 'Inviata' },
+    { id: 5,  name: 'Integrazione richiesta',  short: 'Integrazione' },
+    { id: 6,  name: 'Titolo riconosciuto',     short: 'Titolo' },
+    { id: 7,  name: 'Nulla osta richiesto',    short: 'Nulla osta' },
+    { id: 8,  name: 'Visto ottenuto',          short: 'Visto' },
+    { id: 9,  name: 'Iscrizione OPI',          short: 'OPI' },
+    { id: 10, name: 'Arrivo in Italia',        short: 'Arrivo' },
+    { id: 11, name: 'Onboarding completato',   short: 'Onboarding' },
+  ];
+
+  // Realistic max days a case should sit in a given step before it becomes a risk.
+  const STEP_SLA_DAYS = { 1: 14, 2: 30, 3: 21, 4: 45, 5: 30, 6: 60, 7: 45, 8: 30, 9: 21, 10: 20, 11: 30 };
+
+  // Per-step mandatory checklist templates. Instantiated per nurse with done flags.
+  const CHECKLIST_TEMPLATES = {
+    1:  ['Raccolta dati anagrafici e passaporto', 'Firma mandato con agenzia partner locale', 'Valutazione iniziale livello linguistico'],
+    2:  ['Caricamento Diploma', 'Caricamento Certificato Professionale', 'Caricamento Traduzione Asseverata', 'Caricamento Legalizzazione (Apostille)'],
+    3:  ['Verifica autenticità di tutti i documenti', 'Controllo validità e conformità traduzioni'],
+    4:  ['Compilazione modulo Ministero della Salute', 'Invio telematico della pratica di riconoscimento'],
+    5:  ['Risposta alla richiesta di integrazione documentale', 'Invio documenti integrativi richiesti'],
+    6:  ['Ricezione decreto di riconoscimento del titolo'],
+    7:  ['Richiesta nulla osta allo Sportello Unico Immigrazione', 'Conferma disponibilità datore di lavoro'],
+    8:  ['Appuntamento al consolato italiano', 'Rilascio del visto di ingresso'],
+    9:  ['Preparazione domanda iscrizione OPI', 'Pagamento quota di iscrizione', 'Iscrizione effettiva all’albo OPI'],
+    10: ['Prenotazione volo verso l’Italia', 'Conferma alloggio temporaneo', 'Richiesta permesso di soggiorno'],
+    11: ['Firma del contratto di lavoro', 'Assegnazione tutor aziendale', 'Completamento onboarding nella struttura'],
+  };
+
+  // Document gating rules per step.
+  const STEP_REQUIRES_NO_MISSING_DOCS = 2; // can't leave "Documenti mancanti" while a doc is still missing
+  const STEP_REQUIRES_ALL_DOCS_APPROVED = 3; // can't leave "Documenti verificati" until every doc is approved
+
+  // Status badge metadata.
+  const STATUS_META = {
+    'Missing Docs':         { label: 'Documenti Mancanti',  cls: 'bg-rose-100 text-rose-700 ring-rose-200' },
+    'In Progress':          { label: 'In Lavorazione',      cls: 'bg-indigo-100 text-indigo-700 ring-indigo-200' },
+    'Visa Obtained':        { label: 'Visto Ottenuto',      cls: 'bg-amber-100 text-amber-700 ring-amber-200' },
+    'Onboarding Completed': { label: 'Onboarding Completo', cls: 'bg-emerald-100 text-emerald-700 ring-emerald-200' },
+  };
+
+  const DOC_STATUS_META = {
+    approved: { label: 'Approvato',  cls: 'bg-emerald-100 text-emerald-700 ring-emerald-200', icon: 'check-circle-2' },
+    pending:  { label: 'In Verifica', cls: 'bg-amber-100 text-amber-700 ring-amber-200',     icon: 'clock' },
+    missing:  { label: 'Mancante',   cls: 'bg-rose-100 text-rose-700 ring-rose-200',         icon: 'x-circle' },
+  };
+
+  // ---------- Helpers ----------
+  const STORAGE_KEY = 'nurseflow.state.v1';
+  const uid = () => 'id_' + Math.random().toString(36).slice(2, 10);
+  const today = () => new Date();
+
+  function isoDaysAgo(days) {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+  }
+  function isoMinutesAgo(mins) {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - mins);
+    return d.toISOString();
+  }
+  function formatDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return '—';
+    return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  function formatDateTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return '—';
+    return d.toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  function daysBetween(iso) {
+    if (!iso) return 0;
+    const d = new Date(iso);
+    return Math.max(0, Math.floor((today() - d) / 86400000));
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ---------- Initial / mock state ----------
+  function makeChecklist(stepDoneMap) {
+    // stepDoneMap: { stepId: [bool, bool, ...] } describing done flags for that step's items
+    const out = {};
+    STEPS.forEach((s) => {
+      const tpl = CHECKLIST_TEMPLATES[s.id];
+      const flags = (stepDoneMap && stepDoneMap[s.id]) || [];
+      out[s.id] = tpl.map((label, i) => ({
+        id: uid(),
+        label,
+        done: flags[i] !== undefined ? flags[i] : (s.id < (stepDoneMap.__current || 1)),
+      }));
+    });
+    return out;
+  }
+
+  function seedState() {
+    // -------- Candidate 1: Ana Valeria Rosario — Missing Docs (stuck at step 2) --------
+    const ana = {
+      id: 'nurse_ana',
+      name: 'Ana Valeria Rosario',
+      passport: 'RD-DX1184220',
+      origin: 'Santo Domingo, Repubblica Dominicana',
+      partnerAgency: 'Caribe Health Recruiting SRL',
+      languageLevel: 'A2 — in formazione',
+      employer: 'Casa di Cura San Raffaele · Milano',
+      hrReferent: 'Dott.ssa Giulia Ferraro',
+      currentStep: 2,
+      status: 'Missing Docs',
+      lastUpdate: isoDaysAgo(74), // clearly over the 30g SLA → red risk
+      documents: [
+        { id: uid(), name: 'Diploma di Laurea in Infermieristica', language: 'ES', uploadDate: isoDaysAgo(90), validity: '2034-05-01', status: 'approved' },
+        { id: uid(), name: 'Certificato Professionale (Exatec)',   language: 'ES', uploadDate: isoDaysAgo(88), validity: '2030-01-01', status: 'approved' },
+        { id: uid(), name: 'Traduzione Asseverata del Titolo',     language: 'IT', uploadDate: null,           validity: null,         status: 'missing' },
+        { id: uid(), name: 'Legalizzazione (Apostille de La Haya)', language: 'IT', uploadDate: null,          validity: null,         status: 'missing' },
+      ],
+      checklist: makeChecklist({
+        __current: 2,
+        1: [true, true, true],
+        2: [true, true, false, false], // translation + legalization not uploaded
+      }),
+      relocation: { flight: null, housing: null, tutor: null, contractStatus: 'Non avviato' },
+      logs: [
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 74), type: 'system', author: 'Sistema', text: 'Candidata acquisita e profilo creato.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 80), type: 'note', author: 'Dott.ssa Ferraro', text: 'Diploma e certificato professionale verificati con esito positivo.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 50), type: 'alert', author: 'Sistema', text: 'ALERTA / ALERT: Falta la traducción jurada legalizada del título. Manca la traduzione asseverata legalizzata del titolo.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 30), type: 'call', author: 'Caribe Health Recruiting', text: 'Llamada con la candidata: la apostilla está en trámite en la Procuraduría. Tempo stimato 3 settimane.' },
+      ],
+    };
+
+    // -------- Candidate 2: Carlos Manuel Tejeda — Visa Obtained (step 8) --------
+    const carlos = {
+      id: 'nurse_carlos',
+      name: 'Carlos Manuel Tejeda',
+      passport: 'RD-AK7740915',
+      origin: 'Santiago de los Caballeros, Repubblica Dominicana',
+      partnerAgency: 'Antillas Nursing Partners',
+      languageLevel: 'B1 — certificato CELI',
+      employer: 'Azienda Ospedaliera di Padova',
+      hrReferent: 'Dott. Marco Bianchi',
+      currentStep: 8,
+      status: 'Visa Obtained',
+      lastUpdate: isoDaysAgo(6),
+      documents: [
+        { id: uid(), name: 'Diploma di Laurea in Infermieristica', language: 'ES', uploadDate: isoDaysAgo(210), validity: '2033-09-01', status: 'approved' },
+        { id: uid(), name: 'Certificato Professionale (Exatec)',   language: 'ES', uploadDate: isoDaysAgo(208), validity: '2031-01-01', status: 'approved' },
+        { id: uid(), name: 'Traduzione Asseverata del Titolo',     language: 'IT', uploadDate: isoDaysAgo(180), validity: '2033-09-01', status: 'approved' },
+        { id: uid(), name: 'Legalizzazione (Apostille de La Haya)', language: 'IT', uploadDate: isoDaysAgo(178), validity: '2033-09-01', status: 'approved' },
+        { id: uid(), name: 'Decreto di Riconoscimento del Titolo', language: 'IT', uploadDate: isoDaysAgo(40),  validity: '—',          status: 'approved' },
+        { id: uid(), name: 'Visto di Ingresso (Lavoro Subordinato)', language: 'IT', uploadDate: isoDaysAgo(6), validity: '2026-12-15', status: 'approved' },
+      ],
+      checklist: makeChecklist({
+        __current: 8,
+        1: [true, true, true], 2: [true, true, true, true], 3: [true, true],
+        4: [true, true], 5: [true, true], 6: [true], 7: [true, true],
+        8: [true, true], // visa fully obtained → ready to advance to OPI
+      }),
+      relocation: { flight: null, housing: null, tutor: null, contractStatus: 'Pre-contratto firmato' },
+      logs: [
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 40), type: 'system', author: 'Sistema', text: 'Decreto di riconoscimento del titolo ricevuto.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 20), type: 'note', author: 'Dott. Bianchi', text: 'Nulla osta al lavoro emesso dallo Sportello Unico Immigrazione.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 6),  type: 'alert', author: 'Sistema', text: 'Visto rilasciato dal consolato. Prossimo passo: iscrizione OPI e logistica viaggio.' },
+      ],
+    };
+
+    // -------- Candidate 3: Elena Maria Santos — Onboarding Completed (step 11) --------
+    const elena = {
+      id: 'nurse_elena',
+      name: 'Elena Maria Santos',
+      passport: 'RD-MP3320877',
+      origin: 'La Romana, Repubblica Dominicana',
+      partnerAgency: 'Caribe Health Recruiting SRL',
+      languageLevel: 'B2 — certificato CELI',
+      employer: 'Azienda Ospedaliera di Padova',
+      hrReferent: 'Dott. Marco Bianchi',
+      currentStep: 11,
+      status: 'Onboarding Completed',
+      lastUpdate: isoDaysAgo(12),
+      documents: [
+        { id: uid(), name: 'Diploma di Laurea in Infermieristica', language: 'ES', uploadDate: isoDaysAgo(420), validity: '2032-06-01', status: 'approved' },
+        { id: uid(), name: 'Certificato Professionale (Exatec)',   language: 'ES', uploadDate: isoDaysAgo(418), validity: '2030-01-01', status: 'approved' },
+        { id: uid(), name: 'Traduzione Asseverata del Titolo',     language: 'IT', uploadDate: isoDaysAgo(400), validity: '2032-06-01', status: 'approved' },
+        { id: uid(), name: 'Legalizzazione (Apostille de La Haya)', language: 'IT', uploadDate: isoDaysAgo(398), validity: '2032-06-01', status: 'approved' },
+        { id: uid(), name: 'Decreto di Riconoscimento del Titolo', language: 'IT', uploadDate: isoDaysAgo(150), validity: '—',          status: 'approved' },
+        { id: uid(), name: 'Iscrizione Albo OPI',                  language: 'IT', uploadDate: isoDaysAgo(80),  validity: '2027-01-01', status: 'approved' },
+        { id: uid(), name: 'Contratto di Lavoro Firmato',          language: 'IT', uploadDate: isoDaysAgo(30),  validity: '—',          status: 'approved' },
+      ],
+      checklist: makeChecklist({
+        __current: 12,
+        1: [true, true, true], 2: [true, true, true, true], 3: [true, true],
+        4: [true, true], 5: [true, true], 6: [true], 7: [true, true],
+        8: [true, true], 9: [true, true, true], 10: [true, true, true], 11: [true, true, true],
+      }),
+      relocation: {
+        flight: 'AZ 681 · SDQ → MXP · arrivo 18 mag 2026',
+        housing: 'Foresteria aziendale, Via Giustiniani 12, Padova',
+        tutor: 'Coord. Inf. Laura Marchetti',
+        contractStatus: 'Contratto a tempo indeterminato attivo',
+      },
+      logs: [
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 42), type: 'system', author: 'Sistema', text: 'Iscrizione OPI completata.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 30), type: 'note', author: 'Dott. Bianchi', text: 'Arrivo in Italia e permesso di soggiorno ritirato.' },
+        { id: uid(), at: isoMinutesAgo(60 * 24 * 12), type: 'system', author: 'Sistema', text: 'Onboarding completato: tutor assegnato, contratto attivo. Integrazione conclusa.' },
+      ],
+    };
+
+    return {
+      version: 1,
+      view: 'dashboard',          // 'dashboard' | 'cases'
+      selectedNurseId: 'nurse_ana',
+      search: '',
+      statusFilter: 'all',        // 'all' | one of STATUS_META keys
+      nurses: [ana, carlos, elena],
+    };
+  }
+
+  // ---------- Persistence ----------
+  let state;
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.nurses && parsed.nurses.length) return parsed;
+      }
+    } catch (e) { /* fall through to seed */ }
+    return seedState();
+  }
+  function saveState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* quota — ignore */ }
+    // Debounced cloud sync to Firestore (per-user document) when authenticated.
+    if (fbEnabled && currentUser && db) {
+      clearTimeout(remoteSaveTimer);
+      remoteSaveTimer = setTimeout(() => {
+        db.collection('nurseflow').doc(currentUser.uid)
+          .set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+          .catch((err) => console.warn('Firestore sync fallita:', err && err.message));
+      }, 600);
+    }
+  }
+
+  // ---------- Derived / computed selectors ----------
+  function getNurse(id) { return state.nurses.find((n) => n.id === id); }
+  function stepName(id) { const s = STEPS.find((x) => x.id === id); return s ? s.name : '—'; }
+
+  function deriveStatus(nurse) {
+    if (nurse.currentStep >= 11) return 'Onboarding Completed';
+    if (nurse.documents.some((d) => d.status === 'missing')) return 'Missing Docs';
+    if (nurse.currentStep === 8) return 'Visa Obtained';
+    return 'In Progress';
+  }
+
+  function blockers(nurse) {
+    // Returns array of human-readable reasons the case cannot advance. Empty => can advance.
+    const reasons = [];
+    if (nurse.currentStep >= 11) { reasons.push('Pratica già conclusa (onboarding completato).'); return reasons; }
+    const items = nurse.checklist[nurse.currentStep] || [];
+    const pending = items.filter((i) => !i.done);
+    pending.forEach((i) => reasons.push('Checklist: ' + i.label));
+    if (nurse.currentStep === STEP_REQUIRES_NO_MISSING_DOCS) {
+      const miss = nurse.documents.filter((d) => d.status === 'missing');
+      miss.forEach((d) => reasons.push('Documento mancante: ' + d.name));
+    }
+    if (nurse.currentStep === STEP_REQUIRES_ALL_DOCS_APPROVED) {
+      const notOk = nurse.documents.filter((d) => d.status !== 'approved');
+      notOk.forEach((d) => reasons.push('Documento da approvare: ' + d.name));
+    }
+    return reasons;
+  }
+  function canAdvance(nurse) { return blockers(nurse).length === 0; }
+
+  function isAtRisk(nurse) {
+    if (nurse.currentStep >= 11) return false;
+    const sla = STEP_SLA_DAYS[nurse.currentStep] || 30;
+    return daysBetween(nurse.lastUpdate) > sla;
+  }
+
+  function computeKpis() {
+    const active = state.nurses.filter((n) => n.currentStep < 11).length;
+    const missing = state.nurses.filter((n) => n.documents.some((d) => d.status === 'missing')).length;
+    // Pending OPI: cases that obtained the visa or are at the OPI-registration step.
+    const opi = state.nurses.filter((n) => n.currentStep === 8 || n.currentStep === 9).length;
+    const completed = state.nurses.filter((n) => n.currentStep >= 11).length;
+    return { active, missing, opi, completed };
+  }
+
+  function employerBreakdown() {
+    const map = {};
+    state.nurses.forEach((n) => {
+      const key = n.employer || 'Non assegnato';
+      if (!map[key]) map[key] = { total: 0, completed: 0, active: 0 };
+      map[key].total++;
+      if (n.currentStep >= 11) map[key].completed++; else map[key].active++;
+    });
+    return Object.entries(map).map(([employer, v]) => ({ employer, ...v }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  // ---------- Actions (mutations) ----------
+  function commit() { state.nurses.forEach((n) => { n.status = deriveStatus(n); }); saveState(); render(); }
+
+  function setView(view) { state.view = view; commit(); }
+  function selectNurse(id) { state.selectedNurseId = id; state.view = 'cases'; commit(); }
+  function setSearch(v) { state.search = v; saveState(); renderCasesOnly(); }
+  function setFilter(v) { state.statusFilter = v; commit(); }
+
+  function approveDoc(nurseId, docId) {
+    const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    d.status = 'approved';
+    if (!d.uploadDate) d.uploadDate = new Date().toISOString().slice(0, 10);
+    pushLog(n, 'system', 'Sistema', 'Documento approvato: ' + d.name);
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+  function rejectDoc(nurseId, docId) {
+    const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    d.status = 'missing'; d.uploadDate = null;
+    pushLog(n, 'alert', 'Sistema', 'Documento respinto e segnato come mancante: ' + d.name);
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+  function pendDoc(nurseId, docId) {
+    const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    d.status = 'pending';
+    if (!d.uploadDate) d.uploadDate = new Date().toISOString().slice(0, 10);
+    pushLog(n, 'note', 'Sistema', 'Documento caricato, in attesa di verifica: ' + d.name);
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+
+  function toggleChecklist(nurseId, stepId, itemId) {
+    const n = getNurse(nurseId);
+    const item = (n.checklist[stepId] || []).find((i) => i.id === itemId);
+    if (!item) return;
+    item.done = !item.done;
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+
+  function advanceStatus(nurseId) {
+    const n = getNurse(nurseId);
+    if (!canAdvance(n)) return;
+    if (n.currentStep >= 11) return;
+    const from = stepName(n.currentStep);
+    n.currentStep += 1;
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    pushLog(n, 'system', 'Sistema', 'Stato avanzato: ' + from + ' → ' + stepName(n.currentStep));
+    commit();
+  }
+
+  function pushLog(nurse, type, author, text) {
+    nurse.logs.unshift({ id: uid(), at: new Date().toISOString(), type, author, text });
+  }
+  function addLog(nurseId, type, text) {
+    const n = getNurse(nurseId);
+    const clean = (text || '').trim();
+    if (!clean) return;
+    pushLog(n, type, n.hrReferent || 'Operatore HR', clean);
+    commit();
+  }
+
+  function resetData() {
+    if (!confirm('Ripristinare i dati dimostrativi? Tutte le modifiche locali verranno perse.')) return;
+    state = seedState();
+    saveState();
+    render();
+  }
+
+  // =====================================================================================
+  //  RENDER LAYER
+  // =====================================================================================
+  function statusBadge(statusKey, extra) {
+    const m = STATUS_META[statusKey] || STATUS_META['In Progress'];
+    return '<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ' + m.cls + ' ' + (extra || '') + '">' + escapeHtml(m.label) + '</span>';
+  }
+
+  function render() {
+    const root = document.getElementById('app');
+    // Auth gate: when Firebase is configured but no user is signed in, show the login screen.
+    if (fbEnabled && !currentUser) {
+      root.innerHTML = loginScreen();
+      lucide.createIcons();
+      return;
+    }
+    root.innerHTML = demoBanner() + header() + (state.view === 'dashboard' ? dashboardView() : casesView());
+    lucide.createIcons();
+    maybeAutoStartTour();
+  }
+  // Lightweight re-render of just the cases body (used for search typing to keep focus elsewhere)
+  function renderCasesOnly() {
+    if (state.view !== 'cases') return;
+    const host = document.getElementById('cases-host');
+    if (!host) { render(); return; }
+    host.innerHTML = casesBody();
+    lucide.createIcons();
+  }
+
+  function header() {
+    const tab = (id, label, icon) =>
+      '<button data-action="set-view" data-view="' + id + '" class="group inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ' +
+      (state.view === id ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800') + '">' +
+      '<i data-lucide="' + icon + '" class="h-4 w-4"></i>' + label + '</button>';
+
+    const riskCount = state.nurses.filter(isAtRisk).length;
+
+    return '' +
+    '<header class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">' +
+      '<div class="mx-auto flex max-w-[1400px] items-center gap-4 px-5 py-3">' +
+        '<div class="flex items-center gap-3">' +
+          '<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
+            '<i data-lucide="heart-pulse" class="h-5 w-5"></i></div>' +
+          '<div>' +
+            '<h1 class="text-base font-extrabold leading-tight text-slate-900">NurseFlow</h1>' +
+            '<p class="text-xs text-slate-500">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
+          '</div>' +
+        '</div>' +
+        '<nav data-tour="views" class="ml-4 flex items-center gap-1 rounded-2xl bg-slate-100 p-1">' +
+          tab('dashboard', 'Dashboard Analitica', 'layout-dashboard') +
+          tab('cases', 'Gestione Pratiche', 'folder-kanban') +
+        '</nav>' +
+        '<div class="ml-auto flex items-center gap-2.5">' +
+          (riskCount > 0
+            ? '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + riskCount + ' a rischio</span>'
+            : '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>Nessun rischio</span>') +
+          '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">Guida</span></button>' +
+          '<button data-action="reset" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="Ripristina dati demo"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i></button>' +
+          userCluster() +
+        '</div>' +
+      '</div>' +
+    '</header>';
+  }
+
+  function userCluster() {
+    if (fbEnabled && currentUser) {
+      const label = currentUser.email || currentUser.displayName || 'Utente';
+      const initial = (label[0] || '?').toUpperCase();
+      return '<div class="flex items-center gap-2 border-l border-slate-200 pl-2.5">' +
+        '<span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white" data-tooltip="' + escapeHtml(label) + '">' + escapeHtml(initial) + '</span>' +
+        '<button data-action="logout" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="log-out" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">Esci</span></button>' +
+      '</div>';
+    }
+    return '<span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500" data-tooltip="Configura Firebase per attivare login e DB cloud"><i data-lucide="hard-drive" class="h-3.5 w-3.5"></i>Demo locale</span>';
+  }
+
+  function demoBanner() {
+    if (fbEnabled) return '';
+    return '<div class="border-b border-amber-200 bg-amber-50">' +
+      '<div class="mx-auto flex max-w-[1400px] items-center gap-2 px-5 py-2 text-xs text-amber-700">' +
+        '<i data-lucide="info" class="h-4 w-4 shrink-0"></i>' +
+        '<span><b>Modalità demo locale attiva.</b> I dati sono salvati solo in questo browser. Inserisci la tua configurazione in <code class="rounded bg-amber-100 px-1 py-0.5 font-mono">FIREBASE_CONFIG</code> per abilitare login e database cloud condiviso.</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ------------------------------------------------------------------ DASHBOARD
+  function kpiCard(icon, label, value, tone, sub) {
+    const tones = {
+      indigo: 'from-indigo-500 to-indigo-600 shadow-indigo-200',
+      rose: 'from-rose-500 to-rose-600 shadow-rose-200',
+      amber: 'from-amber-500 to-amber-600 shadow-amber-200',
+      emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-200',
+    };
+    return '<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">' +
+      '<div class="flex items-start justify-between">' +
+        '<div>' +
+          '<p class="text-xs font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
+          '<p class="mt-2 text-3xl font-extrabold text-slate-900">' + value + '</p>' +
+          '<p class="mt-1 text-xs text-slate-400">' + sub + '</p>' +
+        '</div>' +
+        '<div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ' + tones[tone] + ' text-white shadow-lg"><i data-lucide="' + icon + '" class="h-5 w-5"></i></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function dashboardView() {
+    const k = computeKpis();
+    const risks = state.nurses.filter(isAtRisk);
+    const breakdown = employerBreakdown();
+    const maxTotal = Math.max(1, ...breakdown.map((b) => b.total));
+
+    const riskPanel = risks.length === 0
+      ? '<div class="flex items-center gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700 ring-1 ring-inset ring-emerald-200"><i data-lucide="party-popper" class="h-5 w-5"></i>Nessuna pratica bloccata oltre i tempi previsti. Ottimo lavoro.</div>'
+      : risks.map((n) => {
+          const days = daysBetween(n.lastUpdate);
+          const sla = STEP_SLA_DAYS[n.currentStep] || 30;
+          return '<button data-action="open-nurse" data-id="' + n.id + '" class="flex w-full items-center gap-4 rounded-xl border border-rose-200 bg-rose-50/60 p-3.5 text-left transition hover:bg-rose-50">' +
+            '<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600 animate-pulseSoft"><i data-lucide="alarm-clock" class="h-4 w-4"></i></span>' +
+            '<div class="min-w-0 flex-1">' +
+              '<p class="truncate text-sm font-semibold text-slate-900">' + escapeHtml(n.name) + '</p>' +
+              '<p class="truncate text-xs text-slate-500">Bloccato in «' + escapeHtml(stepName(n.currentStep)) + '» • ' + escapeHtml(n.employer) + '</p>' +
+            '</div>' +
+            '<div class="text-right">' +
+              '<p class="text-sm font-bold text-rose-600">' + days + ' gg</p>' +
+              '<p class="text-[11px] text-slate-400">SLA ' + sla + ' gg</p>' +
+            '</div>' +
+            '<i data-lucide="chevron-right" class="h-4 w-4 text-rose-300"></i>' +
+          '</button>';
+        }).join('');
+
+    const breakdownRows = breakdown.map((b) => {
+      const pct = Math.round((b.total / maxTotal) * 100);
+      return '<div class="space-y-1.5">' +
+        '<div class="flex items-center justify-between text-sm">' +
+          '<span class="font-medium text-slate-700">' + escapeHtml(b.employer) + '</span>' +
+          '<span class="text-slate-400">' + b.total + ' candidat' + (b.total === 1 ? 'o' : 'i') + ' • ' + b.completed + ' onboard.</span>' +
+        '</div>' +
+        '<div class="h-2.5 overflow-hidden rounded-full bg-slate-100">' +
+          '<div class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400" style="width:' + pct + '%"></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    // Pipeline distribution mini-overview
+    const pipeline = STEPS.map((s) => {
+      const count = state.nurses.filter((n) => n.currentStep === s.id).length;
+      return '<div class="flex flex-col items-center gap-1">' +
+        '<div class="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ' + (count ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400') + '">' + count + '</div>' +
+        '<span class="w-14 text-center text-[10px] leading-tight text-slate-400">' + escapeHtml(s.short) + '</span>' +
+      '</div>';
+    }).join('');
+
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+      '<div class="mb-6 flex items-end justify-between">' +
+        '<div><h2 class="text-xl font-extrabold text-slate-900">Dashboard Analitica</h2>' +
+        '<p class="text-sm text-slate-500">Visione globale del pipeline di trasferimento.</p></div>' +
+      '</div>' +
+
+      '<div data-tour="kpi" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">' +
+        kpiCard('users-round', 'Pratiche Attive', k.active, 'indigo', 'In lavorazione (step 1–10)') +
+        kpiCard('file-warning', 'Documenti Mancanti', k.missing, 'rose', 'Candidati con doc. da caricare') +
+        kpiCard('clipboard-check', 'In attesa OPI', k.opi, 'amber', 'Pronti / in iscrizione albo') +
+        kpiCard('badge-check', 'Onboarding Completati', k.completed, 'emerald', 'Integrazione conclusa') +
+      '</div>' +
+
+      '<div class="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">' +
+        '<section data-tour="risk" class="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+          '<div class="mb-4 flex items-center gap-2">' +
+            '<i data-lucide="traffic-cone" class="h-5 w-5 text-rose-500"></i>' +
+            '<h3 class="text-sm font-bold text-slate-900">Semafori di Rischio</h3>' +
+            '<span class="ml-auto text-xs text-slate-400">Pratiche ferme oltre la soglia SLA</span>' +
+          '</div>' +
+          '<div class="space-y-2.5">' + riskPanel + '</div>' +
+        '</section>' +
+
+        '<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+          '<div class="mb-4 flex items-center gap-2">' +
+            '<i data-lucide="building-2" class="h-5 w-5 text-indigo-500"></i>' +
+            '<h3 class="text-sm font-bold text-slate-900">Candidati per Struttura</h3>' +
+          '</div>' +
+          '<div class="space-y-4">' + breakdownRows + '</div>' +
+        '</section>' +
+      '</div>' +
+
+      '<section class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+        '<div class="mb-4 flex items-center gap-2">' +
+          '<i data-lucide="git-commit-horizontal" class="h-5 w-5 text-indigo-500"></i>' +
+          '<h3 class="text-sm font-bold text-slate-900">Distribuzione nel Workflow (11 stati)</h3>' +
+        '</div>' +
+        '<div class="flex items-start justify-between gap-1 overflow-x-auto pb-1">' + pipeline + '</div>' +
+      '</section>' +
+    '</main>';
+  }
+
+  // ------------------------------------------------------------------ CASES (master-detail)
+  function casesView() {
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+      '<div id="cases-host">' + casesBody() + '</div>' +
+    '</main>';
+  }
+
+  function filteredNurses() {
+    const q = state.search.trim().toLowerCase();
+    return state.nurses.filter((n) => {
+      if (state.statusFilter !== 'all' && deriveStatus(n) !== state.statusFilter) return false;
+      if (!q) return true;
+      return (
+        n.name.toLowerCase().includes(q) ||
+        n.passport.toLowerCase().includes(q) ||
+        (n.employer || '').toLowerCase().includes(q)
+      );
+    });
+  }
+
+  function casesBody() {
+    return '<div class="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">' +
+      masterList() +
+      detailPanel() +
+    '</div>';
+  }
+
+  function masterList() {
+    const list = filteredNurses();
+    const filterChip = (val, label) =>
+      '<button data-action="set-filter" data-filter="' + val + '" class="rounded-full px-3 py-1 text-xs font-semibold transition ' +
+      (state.statusFilter === val ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200') + '">' + label + '</button>';
+
+    const cards = list.length === 0
+      ? '<div class="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">Nessun candidato trovato.</div>'
+      : list.map((n) => {
+          const selected = n.id === state.selectedNurseId;
+          const risk = isAtRisk(n);
+          return '<button data-action="open-nurse" data-id="' + n.id + '" class="block w-full rounded-xl border p-3.5 text-left transition ' +
+            (selected ? 'border-indigo-300 bg-indigo-50/60 ring-1 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50') + '">' +
+            '<div class="flex items-start justify-between gap-2">' +
+              '<div class="min-w-0">' +
+                '<p class="truncate text-sm font-bold text-slate-900">' + escapeHtml(n.name) + '</p>' +
+                '<p class="mt-0.5 truncate text-xs text-slate-500">' + escapeHtml(n.passport) + ' • ' + escapeHtml(n.employer) + '</p>' +
+              '</div>' +
+              (risk ? '<span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600" data-tooltip="A rischio ritardo"><i data-lucide="alarm-clock" class="h-3 w-3"></i></span>' : '') +
+            '</div>' +
+            '<div class="mt-2.5 flex items-center justify-between gap-2">' +
+              statusBadge(deriveStatus(n)) +
+              '<span class="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400"><i data-lucide="languages" class="h-3 w-3"></i>' + escapeHtml(n.languageLevel.split(' ')[0]) + '</span>' +
+            '</div>' +
+            '<div class="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400"><i data-lucide="map-pin" class="h-3 w-3"></i>Step ' + n.currentStep + '/11 • ' + escapeHtml(stepName(n.currentStep)) + '</div>' +
+          '</button>';
+        }).join('');
+
+    return '<aside data-tour="master" class="lg:sticky lg:top-[76px] lg:self-start">' +
+      '<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">' +
+        '<div class="relative mb-3">' +
+          '<i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"></i>' +
+          '<input id="search-input" data-action="search" type="text" value="' + escapeHtml(state.search) + '" placeholder="Cerca nome, passaporto o struttura…" ' +
+            'class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
+        '</div>' +
+        '<div class="mb-3 flex flex-wrap gap-1.5">' +
+          filterChip('all', 'Tutti') +
+          filterChip('Missing Docs', 'Doc. Mancanti') +
+          filterChip('In Progress', 'In corso') +
+          filterChip('Visa Obtained', 'Visto') +
+          filterChip('Onboarding Completed', 'Completati') +
+        '</div>' +
+        '<div class="max-h-[calc(100vh-220px)] space-y-2.5 overflow-y-auto pr-1">' + cards + '</div>' +
+      '</div>' +
+    '</aside>';
+  }
+
+  function detailPanel() {
+    const n = getNurse(state.selectedNurseId) || filteredNurses()[0];
+    if (!n) return '<div class="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-400">Seleziona un candidato.</div>';
+
+    return '<section class="space-y-5">' +
+      profileHeader(n) +
+      stepper(n) +
+      advanceBar(n) +
+      '<div class="grid grid-cols-1 gap-5 xl:grid-cols-2">' +
+        documentManager(n) +
+        checklistSection(n) +
+      '</div>' +
+      '<div class="grid grid-cols-1 gap-5 xl:grid-cols-2">' +
+        relocationCard(n) +
+        communicationLog(n) +
+      '</div>' +
+    '</section>';
+  }
+
+  function profileHeader(n) {
+    const initials = n.name.split(' ').map((w) => w[0]).slice(0, 2).join('');
+    const field = (icon, label, value) =>
+      '<div class="flex items-start gap-2">' +
+        '<i data-lucide="' + icon + '" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"></i>' +
+        '<div><p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
+        '<p class="text-sm font-medium text-slate-700">' + escapeHtml(value) + '</p></div>' +
+      '</div>';
+
+    return '<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">' +
+      '<div class="flex flex-col gap-4 bg-gradient-to-br from-slate-900 to-slate-800 p-5 sm:flex-row sm:items-center">' +
+        '<div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-indigo-500 text-xl font-extrabold text-white shadow-lg ring-2 ring-white/10">' + escapeHtml(initials) + '</div>' +
+        '<div class="min-w-0 flex-1">' +
+          '<h2 class="text-lg font-extrabold text-white">' + escapeHtml(n.name) + '</h2>' +
+          '<p class="text-sm text-slate-300">' + escapeHtml(n.origin) + '</p>' +
+        '</div>' +
+        '<div class="flex flex-col items-start gap-2 sm:items-end">' +
+          statusBadge(deriveStatus(n)) +
+          '<span class="text-xs text-slate-400">Ultimo aggiornamento: ' + formatDate(n.lastUpdate) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">' +
+        field('book-user', 'Passaporto', n.passport) +
+        field('handshake', 'Agenzia Partner', n.partnerAgency) +
+        field('languages', 'Competenza Linguistica', n.languageLevel) +
+        field('hospital', 'Datore di Lavoro', n.employer) +
+        field('user-cog', 'Referente HR', n.hrReferent) +
+        field('flag', 'Stato Attuale', 'Step ' + n.currentStep + '/11 — ' + stepName(n.currentStep)) +
+      '</div>' +
+    '</div>';
+  }
+
+  function stepper(n) {
+    const nodes = STEPS.map((s) => {
+      let circle, line, labelCls;
+      const blocked = s.id === n.currentStep && !canAdvance(n);
+      if (s.id < n.currentStep) {
+        circle = 'bg-emerald-500 text-white'; labelCls = 'text-emerald-600';
+      } else if (s.id === n.currentStep) {
+        circle = blocked ? 'bg-amber-500 text-white ring-4 ring-amber-100' : 'bg-indigo-600 text-white ring-4 ring-indigo-100';
+        labelCls = blocked ? 'text-amber-600 font-bold' : 'text-indigo-600 font-bold';
+      } else {
+        circle = 'bg-slate-100 text-slate-400'; labelCls = 'text-slate-400';
+      }
+      const inner = s.id < n.currentStep
+        ? '<i data-lucide="check" class="h-4 w-4"></i>'
+        : (blocked ? '<i data-lucide="lock" class="h-3.5 w-3.5"></i>' : String(s.id));
+      return '<div class="flex min-w-[78px] flex-1 flex-col items-center">' +
+        '<div class="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition ' + circle + '">' + inner + '</div>' +
+        '<span class="mt-2 text-center text-[10px] leading-tight ' + labelCls + '">' + escapeHtml(s.short) + '</span>' +
+      '</div>';
+    });
+    // connectors between nodes
+    const withConnectors = [];
+    nodes.forEach((nd, i) => {
+      withConnectors.push(nd);
+      if (i < nodes.length - 1) {
+        const done = (i + 1) < n.currentStep;
+        withConnectors.push('<div class="mt-4 h-0.5 flex-1 min-w-[8px] ' + (done ? 'bg-emerald-400' : 'bg-slate-200') + '"></div>');
+      }
+    });
+
+    return '<div data-tour="stepper" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+      '<div class="mb-4 flex items-center gap-2">' +
+        '<i data-lucide="route" class="h-5 w-5 text-indigo-500"></i>' +
+        '<h3 class="text-sm font-bold text-slate-900">Workflow di Riconoscimento (11 stati)</h3>' +
+      '</div>' +
+      '<div class="flex items-start overflow-x-auto pb-1">' + withConnectors.join('') + '</div>' +
+    '</div>';
+  }
+
+  function advanceBar(n) {
+    const reasons = blockers(n);
+    const ok = reasons.length === 0;
+    const done = n.currentStep >= 11;
+
+    const btn = done
+      ? '<button disabled class="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white opacity-90"><i data-lucide="badge-check" class="h-4 w-4"></i>Pratica Completata</button>'
+      : ok
+        ? '<button data-action="advance" data-id="' + n.id + '" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 active:scale-[.98]"><i data-lucide="arrow-right-circle" class="h-4 w-4"></i>Avanza Stato</button>'
+        : '<button disabled data-tooltip="Completa i requisiti del passo corrente per avanzare" class="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-400"><i data-lucide="lock" class="h-4 w-4"></i>Avanza Stato</button>';
+
+    const banner = done
+      ? '<div class="flex items-center gap-2 text-sm text-emerald-600"><i data-lucide="check-circle-2" class="h-4 w-4"></i>Onboarding completato. Nessuna azione ulteriore richiesta.</div>'
+      : ok
+        ? '<div class="flex items-center gap-2 text-sm text-emerald-600"><i data-lucide="check-circle-2" class="h-4 w-4"></i>Tutti i requisiti del passo «' + escapeHtml(stepName(n.currentStep)) + '» sono soddisfatti.</div>'
+        : '<div class="space-y-1.5">' +
+            '<div class="flex items-center gap-2 text-sm font-semibold text-amber-600"><i data-lucide="alert-triangle" class="h-4 w-4"></i>Avanzamento bloccato — ' + reasons.length + ' requisit' + (reasons.length === 1 ? 'o' : 'i') + ' mancant' + (reasons.length === 1 ? 'e' : 'i') + ':</div>' +
+            '<ul class="ml-6 list-disc space-y-0.5 text-xs text-slate-500">' + reasons.slice(0, 6).map((r) => '<li>' + escapeHtml(r) + '</li>').join('') + '</ul>' +
+          '</div>';
+
+    return '<div data-tour="advance" class="flex flex-col items-start justify-between gap-4 rounded-2xl border p-5 shadow-sm sm:flex-row sm:items-center ' +
+      (done ? 'border-emerald-200 bg-emerald-50/40' : ok ? 'border-indigo-200 bg-indigo-50/30' : 'border-amber-200 bg-amber-50/40') + '">' +
+      '<div class="min-w-0 flex-1">' + banner + '</div>' + btn +
+    '</div>';
+  }
+
+  function documentManager(n) {
+    const rows = n.documents.map((d) => {
+      const m = DOC_STATUS_META[d.status];
+      const actions = d.status === 'approved'
+        ? '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">Respingi</button>'
+        : d.status === 'missing'
+          ? '<button data-action="pend-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">Carica</button>'
+          : '<div class="flex gap-1.5">' +
+              '<button data-action="approve-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-50">Approva</button>' +
+              '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">Respingi</button>' +
+            '</div>';
+      return '<tr class="border-b border-slate-100 last:border-0">' +
+        '<td class="py-3 pr-2"><p class="text-sm font-medium text-slate-800">' + escapeHtml(d.name) + '</p>' +
+          '<p class="text-[11px] text-slate-400">Validità: ' + (d.validity ? escapeHtml(d.validity) : '—') + '</p></td>' +
+        '<td class="px-2 py-3"><span class="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">' + escapeHtml(d.language) + '</span></td>' +
+        '<td class="px-2 py-3 text-xs text-slate-500">' + formatDate(d.uploadDate) + '</td>' +
+        '<td class="px-2 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' + m.cls + '"><i data-lucide="' + m.icon + '" class="h-3 w-3"></i>' + m.label + '</span></td>' +
+        '<td class="py-3 pl-2 text-right">' + actions + '</td>' +
+      '</tr>';
+    }).join('');
+
+    const approved = n.documents.filter((d) => d.status === 'approved').length;
+
+    return '<div data-tour="docs" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+      '<div class="mb-3 flex items-center gap-2">' +
+        '<i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>' +
+        '<h3 class="text-sm font-bold text-slate-900">Ciclo di Vita dei Documenti</h3>' +
+        '<span class="ml-auto text-xs text-slate-400">' + approved + '/' + n.documents.length + ' approvati</span>' +
+      '</div>' +
+      '<div class="overflow-x-auto">' +
+        '<table class="w-full">' +
+          '<thead><tr class="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">' +
+            '<th class="pb-2 pr-2">Documento</th><th class="px-2 pb-2">Ling.</th><th class="px-2 pb-2">Caricato</th><th class="px-2 pb-2">Stato</th><th class="pb-2 pl-2 text-right">Azioni</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function checklistSection(n) {
+    const items = n.checklist[n.currentStep] || [];
+    const done = items.filter((i) => i.done).length;
+    const list = n.currentStep >= 11
+      ? '<div class="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700 ring-1 ring-inset ring-emerald-200"><i data-lucide="check-circle-2" class="h-4 w-4"></i>Tutti i passi del workflow sono stati completati.</div>'
+      : items.map((i) =>
+          '<label class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ' + (i.done ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-white hover:bg-slate-50') + '">' +
+            '<input type="checkbox" ' + (i.done ? 'checked' : '') + ' data-action="toggle-check" data-nurse="' + n.id + '" data-step="' + n.currentStep + '" data-item="' + i.id + '" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />' +
+            '<span class="text-sm ' + (i.done ? 'text-slate-400 line-through' : 'text-slate-700') + '">' + escapeHtml(i.label) + '</span>' +
+          '</label>'
+        ).join('');
+
+    return '<div data-tour="checklist" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+      '<div class="mb-3 flex items-center gap-2">' +
+        '<i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>' +
+        '<h3 class="text-sm font-bold text-slate-900">Checklist Obbligatoria</h3>' +
+        (n.currentStep < 11 ? '<span class="ml-auto text-xs text-slate-400">' + done + '/' + items.length + ' — passo ' + n.currentStep + '</span>' : '') +
+      '</div>' +
+      '<p class="mb-3 text-xs text-slate-400">Requisiti dello stato corrente: «' + escapeHtml(stepName(n.currentStep)) + '»</p>' +
+      '<div class="space-y-2">' + list + '</div>' +
+    '</div>';
+  }
+
+  function relocationCard(n) {
+    const r = n.relocation || {};
+    const row = (icon, label, value) =>
+      '<div class="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">' +
+        '<i data-lucide="' + icon + '" class="mt-0.5 h-4 w-4 shrink-0 text-indigo-400"></i>' +
+        '<div><p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
+        '<p class="text-sm font-medium text-slate-700">' + (value ? escapeHtml(value) : '<span class="text-slate-300">Da definire</span>') + '</p></div>' +
+      '</div>';
+    return '<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+      '<div class="mb-3 flex items-center gap-2">' +
+        '<i data-lucide="plane" class="h-5 w-5 text-indigo-500"></i>' +
+        '<h3 class="text-sm font-bold text-slate-900">Logistica & Onboarding HR</h3>' +
+      '</div>' +
+      '<div class="space-y-2.5">' +
+        row('ticket', 'Dettagli Volo', r.flight) +
+        row('home', 'Alloggio Temporaneo', r.housing) +
+        row('user-check', 'Tutor Assegnato', r.tutor) +
+        row('file-signature', 'Stato Contratto', r.contractStatus) +
+      '</div>' +
+    '</div>';
+  }
+
+  function communicationLog(n) {
+    const ICONS = { note: 'message-square', call: 'phone', alert: 'bell-ring', system: 'cpu' };
+    const TONES = {
+      note: 'bg-indigo-100 text-indigo-600',
+      call: 'bg-emerald-100 text-emerald-600',
+      alert: 'bg-rose-100 text-rose-600',
+      system: 'bg-slate-200 text-slate-500',
+    };
+    const entries = n.logs.map((l) =>
+      '<li class="relative flex gap-3 pb-4 last:pb-0">' +
+        '<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ' + (TONES[l.type] || TONES.system) + '"><i data-lucide="' + (ICONS[l.type] || 'cpu') + '" class="h-3.5 w-3.5"></i></span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<div class="flex items-center justify-between gap-2">' +
+            '<p class="text-xs font-semibold text-slate-700">' + escapeHtml(l.author) + '</p>' +
+            '<p class="text-[11px] text-slate-400">' + formatDateTime(l.at) + '</p>' +
+          '</div>' +
+          '<p class="mt-0.5 text-sm text-slate-600">' + escapeHtml(l.text) + '</p>' +
+        '</div>' +
+      '</li>'
+    ).join('');
+
+    return '<div data-tour="log" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+      '<div class="mb-3 flex items-center gap-2">' +
+        '<i data-lucide="history" class="h-5 w-5 text-indigo-500"></i>' +
+        '<h3 class="text-sm font-bold text-slate-900">Log Comunicazioni & Audit Trail</h3>' +
+      '</div>' +
+      '<form data-action="add-log-form" data-nurse="' + n.id + '" class="mb-4 space-y-2">' +
+        '<textarea id="log-text-' + n.id + '" rows="2" placeholder="Aggiungi una nota o registra una chiamata… / Añadir nota o registrar llamada…" ' +
+          'class="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"></textarea>' +
+        '<div class="flex items-center gap-2">' +
+          '<select id="log-type-' + n.id + '" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 outline-none focus:border-indigo-300">' +
+            '<option value="note">Nota</option><option value="call">Chiamata</option><option value="alert">Avviso</option>' +
+          '</select>' +
+          '<button type="submit" class="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700"><i data-lucide="send" class="h-3.5 w-3.5"></i>Registra</button>' +
+        '</div>' +
+      '</form>' +
+      '<ul class="relative max-h-80 overflow-y-auto pr-1">' + entries + '</ul>' +
+    '</div>';
+  }
+
+  // =====================================================================================
+  //  LOGIN SCREEN (rendered only when Firebase is configured)
+  // =====================================================================================
+  function loginScreen() {
+    return '<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 px-4 py-10">' +
+      '<div class="w-full max-w-md animate-fadeIn">' +
+        '<div class="mb-6 flex flex-col items-center text-center">' +
+          '<div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-xl shadow-indigo-900/40"><i data-lucide="heart-pulse" class="h-7 w-7"></i></div>' +
+          '<h1 class="text-2xl font-extrabold text-white">NurseFlow</h1>' +
+          '<p class="mt-1 text-sm text-slate-300">Gestionale Trasferimento Infermieri · Accesso riservato</p>' +
+        '</div>' +
+        '<div class="rounded-2xl border border-white/10 bg-white p-6 shadow-2xl">' +
+          '<div id="auth-error" class="mb-3 hidden rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200"></div>' +
+          '<form data-action="login-form" class="space-y-3">' +
+            '<div>' +
+              '<label class="mb-1 block text-xs font-semibold text-slate-500">Email</label>' +
+              '<input id="auth-email" type="email" autocomplete="username" placeholder="nome@struttura.it" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
+            '</div>' +
+            '<div>' +
+              '<label class="mb-1 block text-xs font-semibold text-slate-500">Password</label>' +
+              '<input id="auth-pass" type="password" autocomplete="current-password" placeholder="••••••••" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
+            '</div>' +
+            '<div class="flex gap-2 pt-1">' +
+              '<button type="submit" data-intent="login" class="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700">Accedi</button>' +
+              '<button type="submit" data-intent="signup" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">Registrati</button>' +
+            '</div>' +
+          '</form>' +
+          '<div class="my-4 flex items-center gap-3"><div class="h-px flex-1 bg-slate-100"></div><span class="text-[11px] font-medium text-slate-400">oppure</span><div class="h-px flex-1 bg-slate-100"></div></div>' +
+          '<button data-action="login-google" class="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">' +
+            '<svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.23 1.06-3.72 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.11a6.6 6.6 0 0 1 0-4.22V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.05l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/></svg>' +
+            'Continua con Google</button>' +
+          '<p class="mt-4 text-center text-[11px] text-slate-400">I dati di ogni utente sono salvati in modo isolato su Firebase Firestore.</p>' +
+        '</div>' +
+        '<p class="mt-4 text-center text-xs text-slate-400">Protetto da Firebase Authentication</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function showAuthError(msg) {
+    const el = document.getElementById('auth-error');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+  function translateAuthError(e) {
+    const code = (e && e.code) || '';
+    const map = {
+      'auth/invalid-email': 'Indirizzo email non valido.',
+      'auth/user-not-found': 'Nessun account con questa email. Prova a registrarti.',
+      'auth/wrong-password': 'Password errata.',
+      'auth/invalid-credential': 'Credenziali non valide.',
+      'auth/email-already-in-use': 'Email già registrata. Effettua l’accesso.',
+      'auth/weak-password': 'La password deve avere almeno 6 caratteri.',
+      'auth/popup-closed-by-user': 'Finestra di accesso chiusa prima del completamento.',
+      'auth/operation-not-allowed': 'Metodo di accesso non abilitato nella console Firebase.',
+    };
+    return map[code] || ('Errore di autenticazione: ' + (e && e.message ? e.message : code));
+  }
+
+  async function emailAuth(isSignup) {
+    if (!auth) return;
+    const email = (document.getElementById('auth-email') || {}).value || '';
+    const pass = (document.getElementById('auth-pass') || {}).value || '';
+    if (!email.trim() || !pass) { showAuthError('Inserisci email e password.'); return; }
+    try {
+      if (isSignup) await auth.createUserWithEmailAndPassword(email.trim(), pass);
+      else await auth.signInWithEmailAndPassword(email.trim(), pass);
+    } catch (e) { showAuthError(translateAuthError(e)); }
+  }
+  async function googleAuth() {
+    if (!auth) return;
+    try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    catch (e) { showAuthError(translateAuthError(e)); }
+  }
+  async function doLogout() { if (auth) { try { await auth.signOut(); } catch (e) { /* ignore */ } } }
+
+  // =====================================================================================
+  //  FIREBASE INIT + REMOTE STATE
+  // =====================================================================================
+  function initFirebase() {
+    if (!firebaseConfigured()) return false;
+    try {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      fbEnabled = true;
+      auth.onAuthStateChanged(async (user) => {
+        currentUser = user;
+        tourAutoChecked = false; // re-evaluate tour for the new session
+        if (user) { await loadRemoteState(); render(); }
+        else { render(); }
+      });
+      return true;
+    } catch (e) {
+      console.warn('Init Firebase fallito, passo a modalità locale:', e && e.message);
+      fbEnabled = false; auth = null; db = null;
+      return false;
+    }
+  }
+
+  async function loadRemoteState() {
+    try {
+      const ref = db.collection('nurseflow').doc(currentUser.uid);
+      const snap = await ref.get();
+      if (snap.exists && snap.data() && snap.data().state) {
+        state = snap.data().state;
+      } else {
+        state = seedState();
+        await ref.set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      }
+    } catch (e) {
+      console.warn('Lettura Firestore fallita, uso cache locale:', e && e.message);
+      state = loadState();
+    }
+    state.nurses.forEach((n) => { n.status = deriveStatus(n); });
+  }
+
+  // =====================================================================================
+  //  INTERACTIVE GUIDED TOUR
+  // =====================================================================================
+  const TOUR_SEEN_KEY = 'nurseflow.tourSeen.v1';
+  let tour = { active: false, i: 0 };
+  const TOUR_STEPS = [
+    { view: 'dashboard', sel: '[data-tour="views"]', title: '1 · Due aree di lavoro', text: 'Passa in qualsiasi momento tra la <b>Dashboard Analitica</b> (visione globale) e la <b>Gestione Pratiche</b> (lavoro sul singolo candidato).' },
+    { view: 'dashboard', sel: '[data-tour="kpi"]', title: '2 · Indicatori chiave', text: 'Le KPI riassumono lo stato operativo: pratiche attive, documenti mancanti, candidati in attesa di iscrizione OPI e onboarding completati.' },
+    { view: 'dashboard', sel: '[data-tour="risk"]', title: '3 · Semafori di rischio', text: 'Qui compaiono le pratiche ferme oltre la soglia di tempo prevista per il loro stato. Clicca una riga per aprire subito la pratica e intervenire.' },
+    { view: 'cases', sel: '[data-tour="master"]', title: '4 · Elenco candidati', text: 'Cerca per nome, passaporto o struttura e filtra per stato. Ogni scheda mostra badge di stato, livello linguistico e step corrente.' },
+    { view: 'cases', sel: '[data-tour="stepper"]', title: '5 · Workflow a 11 stati', text: 'La timeline mostra l’intero percorso. <span class="text-emerald-600 font-semibold">Verde</span> = completato, <span class="text-indigo-600 font-semibold">indaco</span> = stato attuale, <span class="text-amber-600 font-semibold">ambra</span> = bloccato.' },
+    { view: 'cases', sel: '[data-tour="advance"]', title: '6 · Avanza stato', text: 'Il pulsante si sblocca solo quando la checklist e le verifiche documentali del passo corrente sono soddisfatte. In caso contrario vedi qui i requisiti mancanti.' },
+    { view: 'cases', sel: '[data-tour="docs"]', title: '7 · Gestione documenti', text: 'Carica, approva o respingi ciascun documento (diploma, traduzione asseverata, legalizzazione…). Ogni azione aggiorna istantaneamente stato e audit trail.' },
+    { view: 'cases', sel: '[data-tour="checklist"]', title: '8 · Checklist obbligatoria', text: 'Le attività cambiano dinamicamente in base alla fase corrente, per evitare errori operativi prima di avanzare.' },
+    { view: 'cases', sel: '[data-tour="log"]', title: '9 · Log & audit trail', text: 'Cronologia di note, chiamate e avvisi automatici (IT/ES). Usa il form per registrare nuove comunicazioni direttamente nella pratica.' },
+  ];
+
+  function ensureTourDom() {
+    if (document.getElementById('tour-layer')) return;
+    const layer = document.createElement('div');
+    layer.id = 'tour-layer';
+    layer.innerHTML = '<div id="tour-hole"></div><div id="tour-card"></div>';
+    document.body.appendChild(layer);
+  }
+  function removeTourDom() { const l = document.getElementById('tour-layer'); if (l) l.remove(); }
+
+  function maybeAutoStartTour() {
+    if (tourAutoChecked) return;
+    tourAutoChecked = true;
+    if (tour.active) return;
+    let seen = false;
+    try { seen = localStorage.getItem(TOUR_SEEN_KEY) === '1'; } catch (e) { /* ignore */ }
+    if (!seen) setTimeout(startTour, 450);
+  }
+  function startTour() { ensureTourDom(); tour.active = true; tour.i = 0; renderTourStep(); }
+  function tourNext() { if (tour.i < TOUR_STEPS.length - 1) { tour.i++; renderTourStep(); } else endTour(true); }
+  function tourPrev() { if (tour.i > 0) { tour.i--; renderTourStep(); } }
+  function endTour(remember) {
+    tour.active = false; removeTourDom();
+    if (remember) { try { localStorage.setItem(TOUR_SEEN_KEY, '1'); } catch (e) { /* ignore */ } }
+  }
+
+  function tourCardHtml(step) {
+    const dots = TOUR_STEPS.map((_, i) =>
+      '<span class="h-1.5 rounded-full transition-all ' + (i === tour.i ? 'w-5 bg-indigo-600' : 'w-1.5 bg-slate-300') + '"></span>').join('');
+    const isLast = tour.i === TOUR_STEPS.length - 1;
+    return '<div class="flex items-center justify-between">' +
+        '<span class="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">Guida ' + (tour.i + 1) + '/' + TOUR_STEPS.length + '</span>' +
+        '<button data-action="tour-skip" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-4 w-4"></i></button>' +
+      '</div>' +
+      '<h4 class="mt-1.5 text-base font-extrabold text-slate-900">' + step.title + '</h4>' +
+      '<p class="mt-1.5 text-sm leading-relaxed text-slate-600">' + step.text + '</p>' +
+      '<div class="mt-4 flex items-center justify-between">' +
+        '<div class="flex items-center gap-1">' + dots + '</div>' +
+        '<div class="flex items-center gap-2">' +
+          (tour.i > 0 ? '<button data-action="tour-prev" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">Indietro</button>' : '') +
+          '<button data-action="tour-next" class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700">' + (isLast ? 'Fine' : 'Avanti') + '<i data-lucide="' + (isLast ? 'check' : 'arrow-right') + '" class="h-3.5 w-3.5"></i></button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderTourStep() {
+    const step = TOUR_STEPS[tour.i];
+    let needRender = false;
+    if (step.view && state.view !== step.view) { state.view = step.view; saveState(); needRender = true; }
+    if (step.view === 'cases' && !getNurse(state.selectedNurseId) && state.nurses.length) {
+      state.selectedNurseId = state.nurses[0].id; needRender = true;
+    }
+    if (needRender) render();
+    requestAnimationFrame(() => requestAnimationFrame(() => positionTour(step)));
+  }
+
+  function positionTour(step) {
+    if (!tour.active) return;
+    ensureTourDom();
+    const el = document.querySelector(step.sel);
+    const hole = document.getElementById('tour-hole');
+    const card = document.getElementById('tour-card');
+    card.innerHTML = tourCardHtml(step);
+    lucide.createIcons();
+
+    if (!el) { // target missing: center the card, hide the spotlight
+      hole.style.opacity = '0';
+      card.style.top = '50%'; card.style.left = '50%';
+      card.style.transform = 'translate(-50%, -50%)'; card.style.opacity = '1';
+      return;
+    }
+    card.style.transform = 'none';
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+    requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      hole.style.opacity = '1';
+      hole.style.top = (r.top - pad) + 'px';
+      hole.style.left = (r.left - pad) + 'px';
+      hole.style.width = (r.width + pad * 2) + 'px';
+      hole.style.height = (r.height + pad * 2) + 'px';
+      const cr = card.getBoundingClientRect();
+      let top = r.bottom + 14;
+      if (top + cr.height > window.innerHeight - 12) top = r.top - cr.height - 14;
+      if (top < 12) top = 12;
+      let left = r.left + r.width / 2 - cr.width / 2;
+      left = Math.max(12, Math.min(left, window.innerWidth - cr.width - 12));
+      card.style.top = top + 'px';
+      card.style.left = left + 'px';
+      card.style.opacity = '1';
+    });
+  }
+
+  // Keep the spotlight aligned on resize/scroll while the tour is active.
+  window.addEventListener('resize', () => { if (tour.active) positionTour(TOUR_STEPS[tour.i]); });
+  window.addEventListener('scroll', () => { if (tour.active) positionTour(TOUR_STEPS[tour.i]); }, true);
+
+  // =====================================================================================
+  //  EVENT DELEGATION
+  // =====================================================================================
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-action]');
+    if (!t) return;
+    const a = t.getAttribute('data-action');
+    switch (a) {
+      case 'set-view': setView(t.getAttribute('data-view')); break;
+      case 'open-nurse': selectNurse(t.getAttribute('data-id')); break;
+      case 'set-filter': setFilter(t.getAttribute('data-filter')); break;
+      case 'advance': advanceStatus(t.getAttribute('data-id')); break;
+      case 'approve-doc': approveDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'reject-doc': rejectDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'pend-doc': pendDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'reset': resetData(); break;
+      case 'start-tour': startTour(); break;
+      case 'tour-next': tourNext(); break;
+      case 'tour-prev': tourPrev(); break;
+      case 'tour-skip': endTour(true); break;
+      case 'login-google': googleAuth(); break;
+      case 'logout': doLogout(); break;
+    }
+  });
+
+  document.addEventListener('change', (e) => {
+    const t = e.target.closest('[data-action="toggle-check"]');
+    if (t) {
+      toggleChecklist(t.getAttribute('data-nurse'), parseInt(t.getAttribute('data-step'), 10), t.getAttribute('data-item'));
+    }
+  });
+
+  document.addEventListener('input', (e) => {
+    const t = e.target.closest('[data-action="search"]');
+    if (t) { state.search = t.value; saveState();
+      // Re-render the master list only, preserving input focus & caret.
+      const host = document.getElementById('cases-host');
+      if (host) {
+        const caret = t.selectionStart;
+        host.innerHTML = casesBody();
+        lucide.createIcons();
+        const fresh = document.getElementById('search-input');
+        if (fresh) { fresh.focus(); try { fresh.setSelectionRange(caret, caret); } catch (_) {} }
+      }
+    }
+  });
+
+  document.addEventListener('submit', (e) => {
+    const logForm = e.target.closest('[data-action="add-log-form"]');
+    if (logForm) {
+      e.preventDefault();
+      const nurseId = logForm.getAttribute('data-nurse');
+      const ta = document.getElementById('log-text-' + nurseId);
+      const sel = document.getElementById('log-type-' + nurseId);
+      addLog(nurseId, sel ? sel.value : 'note', ta ? ta.value : '');
+      return;
+    }
+    const authForm = e.target.closest('[data-action="login-form"]');
+    if (authForm) {
+      e.preventDefault();
+      const intent = e.submitter && e.submitter.getAttribute('data-intent') === 'signup';
+      emailAuth(intent);
+    }
+  });
+
+  // ---------- Boot ----------
+  if (initFirebase()) {
+    // Firebase configured: onAuthStateChanged drives rendering (login screen → app).
+    // Seed a baseline state so the first render before auth resolves never crashes.
+    state = loadState();
+    state.nurses.forEach((n) => { n.status = deriveStatus(n); });
+    render(); // shows login screen (no currentUser yet)
+  } else {
+    // Local demo mode: no auth, localStorage only.
+    state = loadState();
+    state.nurses.forEach((n) => { n.status = deriveStatus(n); });
+    render();
+  }
+  </script>
+</body>
+</html>
