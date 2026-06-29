@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NurseFlow · Gestionale Trasferimento Infermieri</title>
+  <title>DominicaHealthLink · Gestionale Trasferimento Infermieri</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Firebase (compat SDK — works in a single file). App runs in local demo mode until FIREBASE_CONFIG is filled. -->
@@ -61,7 +61,7 @@
 
   <script>
   // =====================================================================================
-  //  NurseFlow — Gestionale Trasferimento Infermieri (Repubblica Dominicana → Italia)
+  //  DominicaHealthLink — Gestionale Trasferimento Infermieri (Repubblica Dominicana → Italia)
   //  Single-file reactive app · Vanilla ES6+ · Tailwind + Lucide
   //  Persistence: Firebase Firestore (per-user cloud DB) + localStorage cache/fallback
   //  Auth: Firebase Authentication (email/password + Google). Local demo mode if unset.
@@ -467,6 +467,131 @@
     render();
   }
 
+  // ---------- Create anagrafica & documents (modals) ----------
+  function defaultRequiredDocs() {
+    return [
+      { id: uid(), name: 'Diploma di Laurea in Infermieristica', language: 'ES', uploadDate: null, validity: null, status: 'missing' },
+      { id: uid(), name: 'Certificato Professionale (Exatec)', language: 'ES', uploadDate: null, validity: null, status: 'missing' },
+      { id: uid(), name: 'Traduzione Asseverata del Titolo', language: 'IT', uploadDate: null, validity: null, status: 'missing' },
+      { id: uid(), name: 'Legalizzazione (Apostille de La Haya)', language: 'IT', uploadDate: null, validity: null, status: 'missing' },
+    ];
+  }
+
+  function modalShell(inner) {
+    closeModal();
+    const wrap = document.createElement('div');
+    wrap.id = 'modal-layer';
+    wrap.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4';
+    wrap.style.backdropFilter = 'blur(2px)';
+    wrap.innerHTML = '<div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl animate-fadeIn">' + inner + '</div>';
+    document.body.appendChild(wrap);
+    lucide.createIcons();
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) closeModal(); });
+    return wrap;
+  }
+  function closeModal() { const m = document.getElementById('modal-layer'); if (m) m.remove(); }
+  function fieldVal(id) { const e = document.getElementById(id); return e ? e.value.trim() : ''; }
+  function inputField(id, label, ph, required) {
+    return '<div>' +
+      '<label class="mb-1 block text-xs font-semibold text-slate-500">' + label + (required ? ' <span class="text-rose-500">*</span>' : '') + '</label>' +
+      '<input id="' + id + '" type="text" placeholder="' + escapeHtml(ph) + '" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
+    '</div>';
+  }
+
+  function openNewNurseModal() {
+    const inner =
+      '<div class="flex items-center justify-between border-b border-slate-100 p-5">' +
+        '<div class="flex items-center gap-2"><i data-lucide="user-plus" class="h-5 w-5 text-indigo-500"></i><h3 class="text-base font-bold text-slate-900">Nuovo Candidato</h3></div>' +
+        '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
+      '</div>' +
+      '<div id="nn-error" class="mx-5 mt-4 hidden rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200"></div>' +
+      '<div class="grid gap-3 p-5 sm:grid-cols-2">' +
+        inputField('nn-name', 'Nome e cognome', 'Es. Ana Valeria Rosario', true) +
+        inputField('nn-passport', 'Passaporto', 'Es. RD-XX0000000', true) +
+        inputField('nn-origin', 'Origine', 'Es. Santo Domingo, Rep. Dominicana') +
+        inputField('nn-agency', 'Agenzia partner', 'Es. Caribe Health Recruiting') +
+        inputField('nn-lang', 'Livello linguistico', 'Es. A2 — in formazione') +
+        inputField('nn-employer', 'Datore di lavoro', 'Es. Casa di Cura ... · Città') +
+        '<div class="sm:col-span-2">' + inputField('nn-hr', 'Referente HR', 'Es. Dott.ssa Giulia Ferraro') + '</div>' +
+      '</div>' +
+      '<div class="flex justify-end gap-2 border-t border-slate-100 p-5">' +
+        '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">Annulla</button>' +
+        '<button data-action="create-nurse" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>Crea candidato</button>' +
+      '</div>';
+    modalShell(inner);
+    const el = document.getElementById('nn-name'); if (el) el.focus();
+  }
+
+  function createNurseFromForm() {
+    const name = fieldVal('nn-name'), passport = fieldVal('nn-passport');
+    if (!name || !passport) {
+      const err = document.getElementById('nn-error');
+      if (err) { err.textContent = 'Nome e passaporto sono obbligatori.'; err.classList.remove('hidden'); }
+      return;
+    }
+    const nurse = {
+      id: uid(), name: name, passport: passport,
+      origin: fieldVal('nn-origin') || 'Repubblica Dominicana',
+      partnerAgency: fieldVal('nn-agency') || '—',
+      languageLevel: fieldVal('nn-lang') || 'Da valutare',
+      employer: fieldVal('nn-employer') || 'Non assegnato',
+      hrReferent: fieldVal('nn-hr') || '—',
+      currentStep: 1, status: 'In Progress',
+      lastUpdate: new Date().toISOString().slice(0, 10),
+      documents: defaultRequiredDocs(),
+      checklist: makeChecklist({ __current: 1 }),
+      relocation: { flight: null, housing: null, tutor: null, contractStatus: 'Non avviato' },
+      logs: [{ id: uid(), at: new Date().toISOString(), type: 'system', author: 'Sistema', text: 'Candidato acquisito e profilo creato.' }],
+    };
+    state.nurses.unshift(nurse);
+    state.selectedNurseId = nurse.id;
+    state.view = 'cases';
+    closeModal();
+    commit();
+  }
+
+  let pendingDocNurse = null;
+  function openAddDocModal(nurseId) {
+    pendingDocNurse = nurseId;
+    const inner =
+      '<div class="flex items-center justify-between border-b border-slate-100 p-5">' +
+        '<div class="flex items-center gap-2"><i data-lucide="file-plus" class="h-5 w-5 text-indigo-500"></i><h3 class="text-base font-bold text-slate-900">Aggiungi documento</h3></div>' +
+        '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
+      '</div>' +
+      '<div id="ad-error" class="mx-5 mt-4 hidden rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200"></div>' +
+      '<div class="grid gap-3 p-5">' +
+        inputField('ad-name', 'Nome documento', 'Es. Certificato penale', true) +
+        '<div class="grid grid-cols-2 gap-3">' +
+          '<div><label class="mb-1 block text-xs font-semibold text-slate-500">Lingua</label>' +
+            '<select id="ad-lang" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300"><option value="ES">ES</option><option value="IT">IT</option></select></div>' +
+          inputField('ad-validity', 'Validità (opz.)', 'Es. 2030-01-01') +
+        '</div>' +
+      '</div>' +
+      '<div class="flex justify-end gap-2 border-t border-slate-100 p-5">' +
+        '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">Annulla</button>' +
+        '<button data-action="create-doc" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="plus" class="h-4 w-4"></i>Aggiungi</button>' +
+      '</div>';
+    modalShell(inner);
+    const el = document.getElementById('ad-name'); if (el) el.focus();
+  }
+
+  function createDocFromForm() {
+    const n = getNurse(pendingDocNurse);
+    if (!n) { closeModal(); return; }
+    const name = fieldVal('ad-name');
+    if (!name) {
+      const err = document.getElementById('ad-error');
+      if (err) { err.textContent = 'Il nome del documento è obbligatorio.'; err.classList.remove('hidden'); }
+      return;
+    }
+    const lang = (document.getElementById('ad-lang') || {}).value || 'ES';
+    n.documents.push({ id: uid(), name: name, language: lang, uploadDate: null, validity: fieldVal('ad-validity') || null, status: 'missing' });
+    pushLog(n, 'system', 'Sistema', 'Documento richiesto aggiunto: ' + name);
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    closeModal();
+    commit();
+  }
+
   // =====================================================================================
   //  RENDER LAYER
   // =====================================================================================
@@ -511,7 +636,7 @@
           '<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
             '<i data-lucide="heart-pulse" class="h-5 w-5"></i></div>' +
           '<div>' +
-            '<h1 class="text-base font-extrabold leading-tight text-slate-900">NurseFlow</h1>' +
+            '<h1 class="text-base font-extrabold leading-tight text-slate-900">DominicaHealthLink</h1>' +
             '<p class="text-xs text-slate-500">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
           '</div>' +
         '</div>' +
@@ -523,6 +648,7 @@
           (riskCount > 0
             ? '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + riskCount + ' a rischio</span>'
             : '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>Nessun rischio</span>') +
+          '<a href="manuale.html" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="book-open" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">Manuale</span></a>' +
           '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">Guida</span></button>' +
           '<button data-action="reset" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="Ripristina dati demo"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i></button>' +
           userCluster() +
@@ -719,6 +845,7 @@
 
     return '<aside data-tour="master" class="lg:sticky lg:top-[76px] lg:self-start">' +
       '<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">' +
+        '<button data-action="open-new-nurse" class="mb-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700 active:scale-[.99]"><i data-lucide="user-plus" class="h-4 w-4"></i>Nuovo Candidato</button>' +
         '<div class="relative mb-3">' +
           '<i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"></i>' +
           '<input id="search-input" data-action="search" type="text" value="' + escapeHtml(state.search) + '" placeholder="Cerca nome, passaporto o struttura…" ' +
@@ -880,6 +1007,7 @@
         '<i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>' +
         '<h3 class="text-sm font-bold text-slate-900">Ciclo di Vita dei Documenti</h3>' +
         '<span class="ml-auto text-xs text-slate-400">' + approved + '/' + n.documents.length + ' approvati</span>' +
+        '<button data-action="open-add-doc" data-nurse="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="plus" class="h-3 w-3"></i>Aggiungi</button>' +
       '</div>' +
       '<div class="overflow-x-auto">' +
         '<table class="w-full">' +
@@ -985,7 +1113,7 @@
       '<div class="w-full max-w-md animate-fadeIn">' +
         '<div class="mb-6 flex flex-col items-center text-center">' +
           '<div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-xl shadow-indigo-900/40"><i data-lucide="heart-pulse" class="h-7 w-7"></i></div>' +
-          '<h1 class="text-2xl font-extrabold text-white">NurseFlow</h1>' +
+          '<h1 class="text-2xl font-extrabold text-white">DominicaHealthLink</h1>' +
           '<p class="mt-1 text-sm text-slate-300">Gestionale Trasferimento Infermieri · Accesso riservato</p>' +
         '</div>' +
         '<div class="rounded-2xl border border-white/10 bg-white p-6 shadow-2xl">' +
@@ -1229,7 +1357,19 @@
       case 'tour-skip': endTour(true); break;
       case 'login-google': googleAuth(); break;
       case 'logout': doLogout(); break;
+      case 'open-new-nurse': openNewNurseModal(); break;
+      case 'create-nurse': createNurseFromForm(); break;
+      case 'open-add-doc': openAddDocModal(t.getAttribute('data-nurse')); break;
+      case 'create-doc': createDocFromForm(); break;
+      case 'close-modal': closeModal(); break;
     }
+  });
+
+  // Close any open modal / tour with the Escape key.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('modal-layer')) closeModal();
+    else if (tour.active) endTour(true);
   });
 
   document.addEventListener('change', (e) => {
