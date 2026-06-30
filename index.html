@@ -23,6 +23,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -144,7 +145,7 @@
   const ORG_ID = 'default';
 
   // Firebase runtime handles (populated only when configured).
-  let fbEnabled = false, auth = null, db = null, currentUser = null, userClaims = null;
+  let fbEnabled = false, auth = null, db = null, storage = null, currentUser = null, userClaims = null;
   let remoteSaveTimer = null, tourAutoChecked = false;
 
   function firebaseConfigured() {
@@ -288,7 +289,7 @@
       adv_ok_banner:'Tutti i requisiti del passo «{state}» sono soddisfatti.', adv_blocked_title:'Avanzamento bloccato — requisiti da completare:', adv_blocked_tip:'Completa i requisiti del passo corrente per avanzare',
       bl_checklist:'Checklist: {x}', bl_doc_missing:'Documento mancante: {x}', bl_doc_approve:'Documento da approvare: {x}', bl_done:'Pratica già conclusa (onboarding completato).',
       docs_title:'Ciclo di Vita dei Documenti', docs_count:'{a}/{b} approvati', add:'Aggiungi', th_document:'Documento', th_lang:'Ling.', th_uploaded:'Caricato', th_status:'Stato', th_actions:'Azioni',
-      validity:'Validità: {v}', act_approve:'Approva', act_reject:'Respingi', act_upload:'Carica',
+      validity:'Validità: {v}', act_approve:'Approva', act_reject:'Respingi', act_upload:'Carica', act_replace:'Sostituisci', file_too_big:'troppo grande per l’anteprima — abilita Storage', edit_candidate:'Modifica anagrafica', edit_relocation:'Modifica logistica',
       doc_approved:'Approvato', doc_pending:'In Verifica', doc_missing:'Mancante',
       checklist_title:'Checklist Obbligatoria', checklist_count:'{a}/{b} — passo {s}', checklist_sub:'Requisiti dello stato corrente: «{state}»', checklist_all_done:'Tutti i passi del workflow sono stati completati.',
       reloc_title:'Logistica & Onboarding HR', reloc_flight:'Dettagli Volo', reloc_housing:'Alloggio Temporaneo', reloc_tutor:'Tutor Assegnato', reloc_contract:'Stato Contratto', to_define:'Da definire',
@@ -349,7 +350,7 @@
       adv_ok_banner:'All requirements for step “{state}” are satisfied.', adv_blocked_title:'Advancement blocked — requirements to complete:', adv_blocked_tip:'Complete the current step\'s requirements to advance',
       bl_checklist:'Checklist: {x}', bl_doc_missing:'Missing document: {x}', bl_doc_approve:'Document to approve: {x}', bl_done:'Case already completed (onboarding done).',
       docs_title:'Document Lifecycle', docs_count:'{a}/{b} approved', add:'Add', th_document:'Document', th_lang:'Lang.', th_uploaded:'Uploaded', th_status:'Status', th_actions:'Actions',
-      validity:'Validity: {v}', act_approve:'Approve', act_reject:'Reject', act_upload:'Upload',
+      validity:'Validity: {v}', act_approve:'Approve', act_reject:'Reject', act_upload:'Upload', act_replace:'Replace', file_too_big:'too large to preview — enable Storage', edit_candidate:'Edit details', edit_relocation:'Edit logistics',
       doc_approved:'Approved', doc_pending:'Under Review', doc_missing:'Missing',
       checklist_title:'Mandatory Checklist', checklist_count:'{a}/{b} — step {s}', checklist_sub:'Requirements for the current state: “{state}”', checklist_all_done:'All workflow steps have been completed.',
       reloc_title:'Logistics & HR Onboarding', reloc_flight:'Flight Details', reloc_housing:'Temporary Housing', reloc_tutor:'Assigned Tutor', reloc_contract:'Contract Status', to_define:'To be defined',
@@ -409,7 +410,7 @@
       adv_ok_banner:'Todos los requisitos del paso «{state}» están cumplidos.', adv_blocked_title:'Avance bloqueado — requisitos por completar:', adv_blocked_tip:'Completa los requisitos del paso actual para avanzar',
       bl_checklist:'Checklist: {x}', bl_doc_missing:'Documento faltante: {x}', bl_doc_approve:'Documento por aprobar: {x}', bl_done:'Expediente ya concluido (onboarding completado).',
       docs_title:'Ciclo de Vida de los Documentos', docs_count:'{a}/{b} aprobados', add:'Añadir', th_document:'Documento', th_lang:'Idioma', th_uploaded:'Subido', th_status:'Estado', th_actions:'Acciones',
-      validity:'Validez: {v}', act_approve:'Aprobar', act_reject:'Rechazar', act_upload:'Subir',
+      validity:'Validez: {v}', act_approve:'Aprobar', act_reject:'Rechazar', act_upload:'Subir', act_replace:'Reemplazar', file_too_big:'demasiado grande para la vista previa — activa Storage', edit_candidate:'Editar datos', edit_relocation:'Editar logística',
       doc_approved:'Aprobado', doc_pending:'En Verificación', doc_missing:'Faltante',
       checklist_title:'Checklist Obligatoria', checklist_count:'{a}/{b} — paso {s}', checklist_sub:'Requisitos del estado actual: «{state}»', checklist_all_done:'Todos los pasos del flujo se han completado.',
       reloc_title:'Logística & Onboarding RR.HH.', reloc_flight:'Detalles del Vuelo', reloc_housing:'Alojamiento Temporal', reloc_tutor:'Tutor Asignado', reloc_contract:'Estado del Contrato', to_define:'Por definir',
@@ -806,14 +807,69 @@
   function rejectDoc(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
     d.status = 'missing'; d.uploadDate = null;
+    d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null;
     pushLog(n, 'alert', t('log_author_system'), t('log_doc_rejected', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
-  function pendDoc(nurseId, docId) {
-    const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+
+  // ---------- Real file upload for documents ----------
+  let pendingUpload = null;
+  function triggerUpload(nurseId, docId) {
+    pendingUpload = { nurseId: nurseId, docId: docId };
+    let input = document.getElementById('doc-file-input');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'doc-file-input';
+      input.style.display = 'none';
+      input.accept = '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx';
+      input.addEventListener('change', onDocFileChosen);
+      document.body.appendChild(input);
+    }
+    input.value = '';
+    input.click();
+  }
+  function readAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  async function onDocFileChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !pendingUpload) return;
+    const ctx = pendingUpload; pendingUpload = null;
+    const n = getNurse(ctx.nurseId); if (!n) return;
+    const d = n.documents.find((x) => x.id === ctx.docId); if (!d) return;
+
+    d.fileName = file.name;
+    d.fileSize = file.size;
+    d.uploadDate = new Date().toISOString().slice(0, 10);
     d.status = 'pending';
-    if (!d.uploadDate) d.uploadDate = new Date().toISOString().slice(0, 10);
+    d.fileUrl = null; d.fileStoragePath = null;
+
+    try {
+      if (fbEnabled && storage && currentUser) {
+        // Upload the real bytes to Firebase Storage; keep only the download URL in the DB.
+        const base = SHARED_WORKSPACE ? ('documents/org/' + ORG_ID) : ('documents/users/' + currentUser.uid);
+        const path = base + '/' + ctx.docId + '/' + Date.now() + '_' + file.name;
+        const ref = storage.ref().child(path);
+        const snap = await ref.put(file);
+        d.fileUrl = await snap.ref.getDownloadURL();
+        d.fileStoragePath = path;
+      } else if (file.size <= 900 * 1024) {
+        // No cloud storage (demo/offline): embed small files as a data URL so they're viewable.
+        d.fileUrl = await readAsDataURL(file);
+      } else {
+        // Too large to embed without Storage — keep the metadata, flag it.
+        d.fileTooBig = true;
+      }
+    } catch (err) {
+      console.warn('Upload fallito:', err && err.message);
+    }
     pushLog(n, 'note', t('log_author_system'), t('log_doc_uploaded', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
@@ -894,10 +950,13 @@
     '</div>';
   }
 
-  function openNewNurseModal() {
+  let editNurseId = null;
+  function openNewNurseModal(editId) {
+    editNurseId = editId || null;
+    const e = editNurseId ? getNurse(editNurseId) : null;
     const inner =
       '<div class="flex items-center justify-between border-b border-slate-100 p-5">' +
-        '<div class="flex items-center gap-2"><i data-lucide="user-plus" class="h-5 w-5 text-indigo-500"></i><h3 class="text-base font-bold text-slate-900">' + t('nn_title') + '</h3></div>' +
+        '<div class="flex items-center gap-2"><i data-lucide="' + (e ? 'user-cog' : 'user-plus') + '" class="h-5 w-5 text-indigo-500"></i><h3 class="text-base font-bold text-slate-900">' + (e ? t('edit_candidate') : t('nn_title')) + '</h3></div>' +
         '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
       '</div>' +
       '<div id="nn-error" class="mx-5 mt-4 hidden rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200"></div>' +
@@ -905,16 +964,20 @@
         inputField('nn-name', t('nn_name'), 'Ana Valeria Rosario', true) +
         inputField('nn-passport', t('nn_passport'), 'RD-XX0000000', true) +
         inputField('nn-origin', t('nn_origin'), 'Santo Domingo') +
-        selectField('nn-agency', t('nn_agency'), agencyOptions(), '') +
+        selectField('nn-agency', t('nn_agency'), agencyOptions(), e ? e.partnerAgency : '') +
         inputField('nn-lang', t('nn_lang'), 'A2') +
-        selectField('nn-employer', t('nn_employer'), employerOptions(), '') +
-        '<div class="sm:col-span-2">' + selectField('nn-hr', t('nn_hr'), operatorOptions(), '') + '</div>' +
+        selectField('nn-employer', t('nn_employer'), employerOptions(), e ? e.employer : '') +
+        '<div class="sm:col-span-2">' + selectField('nn-hr', t('nn_hr'), operatorOptions(), e ? e.hrReferent : '') + '</div>' +
       '</div>' +
       '<div class="flex justify-end gap-2 border-t border-slate-100 p-5">' +
         '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">' + t('cancel') + '</button>' +
-        '<button data-action="create-nurse" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>' + t('nn_create') + '</button>' +
+        '<button data-action="create-nurse" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>' + (e ? t('save') : t('nn_create')) + '</button>' +
       '</div>';
     modalShell(inner);
+    if (e) {
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+      set('nn-name', e.name); set('nn-passport', e.passport); set('nn-origin', e.origin); set('nn-lang', e.languageLevel);
+    }
     const el = document.getElementById('nn-name'); if (el) el.focus();
   }
 
@@ -923,6 +986,23 @@
     if (!name || !passport) {
       const err = document.getElementById('nn-error');
       if (err) { err.textContent = t('nn_error'); err.classList.remove('hidden'); }
+      return;
+    }
+    if (editNurseId) {
+      // Edit mode: update only the anagrafica fields, keep documents/checklist/state.
+      const e = getNurse(editNurseId);
+      if (e) {
+        e.name = name; e.passport = passport;
+        e.origin = fieldVal('nn-origin') || e.origin;
+        e.partnerAgency = fieldVal('nn-agency') || '—';
+        e.languageLevel = fieldVal('nn-lang') || e.languageLevel;
+        e.employer = fieldVal('nn-employer') || t('nn_default_employer');
+        e.hrReferent = fieldVal('nn-hr') || '—';
+        e.lastUpdate = new Date().toISOString().slice(0, 10);
+      }
+      editNurseId = null;
+      closeModal();
+      commit();
       return;
     }
     const nurse = {
@@ -942,6 +1022,46 @@
     state.nurses.unshift(nurse);
     state.selectedNurseId = nurse.id;
     state.view = 'cases';
+    closeModal();
+    commit();
+  }
+
+  // ---------- Relocation / HR onboarding editor ----------
+  let relocationNurseId = null;
+  function openRelocationModal(nurseId) {
+    relocationNurseId = nurseId;
+    const n = getNurse(nurseId); if (!n) return;
+    const r = n.relocation || {};
+    const inner =
+      '<div class="flex items-center justify-between border-b border-slate-100 p-5">' +
+        '<div class="flex items-center gap-2"><i data-lucide="plane" class="h-5 w-5 text-indigo-500"></i><h3 class="text-base font-bold text-slate-900">' + t('reloc_title') + '</h3></div>' +
+        '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
+      '</div>' +
+      '<div class="grid gap-3 p-5">' +
+        inputField('rl-flight', t('reloc_flight'), 'AZ 681 · SDQ → MXP') +
+        inputField('rl-housing', t('reloc_housing'), '') +
+        inputField('rl-tutor', t('reloc_tutor'), '') +
+        inputField('rl-contract', t('reloc_contract'), '') +
+      '</div>' +
+      '<div class="flex justify-end gap-2 border-t border-slate-100 p-5">' +
+        '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">' + t('cancel') + '</button>' +
+        '<button data-action="save-relocation" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>' + t('save') + '</button>' +
+      '</div>';
+    modalShell(inner);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+    set('rl-flight', r.flight); set('rl-housing', r.housing); set('rl-tutor', r.tutor); set('rl-contract', r.contractStatus);
+    const el = document.getElementById('rl-flight'); if (el) el.focus();
+  }
+  function saveRelocation() {
+    const n = getNurse(relocationNurseId); if (!n) { closeModal(); return; }
+    n.relocation = {
+      flight: fieldVal('rl-flight') || null,
+      housing: fieldVal('rl-housing') || null,
+      tutor: fieldVal('rl-tutor') || null,
+      contractStatus: fieldVal('rl-contract') || t('contract_none'),
+    };
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    relocationNurseId = null;
     closeModal();
     commit();
   }
@@ -2190,6 +2310,7 @@
         '<div class="flex flex-col items-start gap-2 sm:items-end">' +
           statusBadge(deriveStatus(n)) +
           '<span class="text-xs text-slate-400">' + t('last_update', { d: formatDate(n.lastUpdate) }) + '</span>' +
+          '<button data-action="open-edit-nurse" data-id="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-white/70 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-white"><i data-lucide="pencil" class="h-3 w-3"></i>' + t('edit_candidate') + '</button>' +
         '</div>' +
       '</div>' +
       '<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">' +
@@ -2271,17 +2392,24 @@
   function documentManager(n) {
     const rows = n.documents.map((d) => {
       const cls = DOC_STATUS_CLS[d.status], icon = DOC_STATUS_ICON[d.status];
+      const uploadBtn = '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
       const actions = d.status === 'approved'
-        ? '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button>'
+        ? '<div class="flex gap-1.5">' + uploadBtn +
+            '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button></div>'
         : d.status === 'missing'
-          ? '<button data-action="pend-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + t('act_upload') + '</button>'
-          : '<div class="flex gap-1.5">' +
+          ? uploadBtn
+          : '<div class="flex gap-1.5">' + uploadBtn +
               '<button data-action="approve-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-50">' + t('act_approve') + '</button>' +
               '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button>' +
             '</div>';
+      const fileLine = d.fileName
+        ? '<p class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><i data-lucide="paperclip" class="h-3 w-3"></i>' +
+            (d.fileUrl ? '<a href="' + escapeHtml(d.fileUrl) + '" target="_blank" rel="noopener" class="font-medium text-indigo-500 underline-offset-2 hover:underline">' + escapeHtml(d.fileName) + '</a>' : escapeHtml(d.fileName)) +
+            (d.fileTooBig ? ' <span class="text-amber-500">(' + escapeHtml(t('file_too_big')) + ')</span>' : '') + '</p>'
+        : '';
       return '<tr class="border-b border-slate-100 last:border-0">' +
         '<td class="py-3 pr-2"><p class="text-sm font-medium text-slate-800">' + escapeHtml(d.name) + '</p>' +
-          '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) + '</p></td>' +
+          '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) + '</p>' + fileLine + '</td>' +
         '<td class="px-2 py-3"><span class="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">' + escapeHtml(d.language) + '</span></td>' +
         '<td class="px-2 py-3 text-xs text-slate-500">' + formatDate(d.uploadDate) + '</td>' +
         '<td class="px-2 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' + cls + '"><i data-lucide="' + icon + '" class="h-3 w-3"></i>' + docStatusLabel(d.status) + '</span></td>' +
@@ -2344,6 +2472,7 @@
       '<div class="mb-3 flex items-center gap-2">' +
         '<i data-lucide="plane" class="h-5 w-5 text-indigo-500"></i>' +
         '<h3 class="text-sm font-bold text-slate-900">' + t('reloc_title') + '</h3>' +
+        '<button data-action="open-relocation" data-id="' + n.id + '" class="ml-auto inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="pencil" class="h-3 w-3"></i>' + t('edit') + '</button>' +
       '</div>' +
       '<div class="space-y-2.5">' +
         row('ticket', t('reloc_flight'), r.flight) +
@@ -2488,6 +2617,7 @@
       firebase.initializeApp(FIREBASE_CONFIG);
       auth = firebase.auth();
       db = firebase.firestore();
+      try { storage = firebase.storage(); } catch (e) { storage = null; }
       fbEnabled = true;
       auth.onAuthStateChanged(async (user) => {
         currentUser = user;
@@ -2672,7 +2802,10 @@
       case 'advance': advanceStatus(t.getAttribute('data-id')); break;
       case 'approve-doc': approveDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
       case 'reject-doc': rejectDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
-      case 'pend-doc': pendDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'upload-doc': triggerUpload(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'open-edit-nurse': openNewNurseModal(t.getAttribute('data-id')); break;
+      case 'open-relocation': openRelocationModal(t.getAttribute('data-id')); break;
+      case 'save-relocation': saveRelocation(); break;
       case 'reset': resetData(); break;
       case 'start-tour': startTour(); break;
       case 'tour-next': tourNext(); break;
