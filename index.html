@@ -135,8 +135,16 @@
     appId: "1:88621070016:web:218cad6b8da9c7027e5f25",
   };
 
+  // ---------- Workspace model ----------
+  // false → per-user private data (each operator has their own isolated workspace).
+  // true  → shared team workspace: all operators see the SAME candidates; admins manage
+  //         base records, operators work on cases. Enforced by Firestore rules + custom claims.
+  // Only enable AFTER deploying firestore.rules and bootstrapping an admin (see FIREBASE-SETUP.md §4).
+  const SHARED_WORKSPACE = true;
+  const ORG_ID = 'default';
+
   // Firebase runtime handles (populated only when configured).
-  let fbEnabled = false, auth = null, db = null, currentUser = null;
+  let fbEnabled = false, auth = null, db = null, currentUser = null, userClaims = null;
   let remoteSaveTimer = null, tourAutoChecked = false;
 
   function firebaseConfigured() {
@@ -664,17 +672,34 @@
     if (!s.settings.docTypes.length) s.settings.docTypes = defaultSettings().docTypes;
     return s;
   }
+  function serverTs() { return firebase.firestore.FieldValue.serverTimestamp(); }
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* quota — ignore */ }
-    // Debounced cloud sync to Firestore (per-user document) when authenticated.
+    // Debounced cloud sync when authenticated.
     if (fbEnabled && currentUser && db) {
       clearTimeout(remoteSaveTimer);
-      remoteSaveTimer = setTimeout(() => {
-        db.collection('nurseflow').doc(currentUser.uid)
-          .set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-          .catch((err) => console.warn('Firestore sync fallita:', err && err.message));
-      }, 600);
+      remoteSaveTimer = setTimeout(remoteSync, 600);
     }
+  }
+  function remoteSync() {
+    if (!(fbEnabled && currentUser && db)) return;
+    try {
+      if (SHARED_WORKSPACE) {
+        // Shared team workspace: cases and settings live in SEPARATE documents with
+        // different permissions (operators write cases; only admins write settings).
+        const data = db.collection('organizations').doc(ORG_ID).collection('data');
+        data.doc('cases').set({ nurses: state.nurses, updatedAt: serverTs() }, { merge: true })
+          .catch((err) => console.warn('Sync casi fallita:', err && err.message));
+        if (isAdmin()) {
+          data.doc('settings').set({ settings: state.settings, updatedAt: serverTs() }, { merge: true })
+            .catch((err) => console.warn('Sync impostazioni fallita:', err && err.message));
+        }
+      } else {
+        db.collection('nurseflow').doc(currentUser.uid)
+          .set({ state: state, updatedAt: serverTs() }, { merge: true })
+          .catch((err) => console.warn('Firestore sync fallita:', err && err.message));
+      }
+    } catch (e) { console.warn('Sync error:', e && e.message); }
   }
 
   // ---------- Derived / computed selectors ----------
@@ -685,12 +710,19 @@
   // (avoids lock-out on first run). In demo mode the role is a switchable local setting.
   function currentRole() {
     if (fbEnabled && currentUser) {
+      // 1) Trusted source: Firebase custom claims (set server-side, enforced by Firestore rules).
+      if (userClaims && (userClaims.role === 'admin' || userClaims.role === 'operator')) return userClaims.role;
+      // 2) Convenience fallback (NOT a security boundary): match by email in the operators list.
+      //    Used only when no role claim is set yet (e.g. single-workspace per-user data).
       const email = (currentUser.email || '').toLowerCase();
       if (email) {
         const op = (state.settings.operators || []).find((o) => (o.email || '').toLowerCase() === email);
         if (op && op.accessRole) return op.accessRole;
       }
-      return 'admin';
+      // In a SHARED team workspace the safe default is least-privilege (operator): admins are
+      // granted explicitly via custom claims. In per-user mode each user owns their own data,
+      // so defaulting to admin-of-own-workspace is harmless.
+      return SHARED_WORKSPACE ? 'operator' : 'admin';
     }
     return state.demoRole || 'admin';
   }
@@ -2460,8 +2492,13 @@
       auth.onAuthStateChanged(async (user) => {
         currentUser = user;
         tourAutoChecked = false; // re-evaluate tour for the new session
-        if (user) { await loadRemoteState(); render(); }
-        else { render(); }
+        userClaims = null;
+        if (user) {
+          // Read the role from Firebase custom claims — the trusted, server-set source.
+          try { const res = await user.getIdTokenResult(); userClaims = res.claims || null; } catch (e) { userClaims = null; }
+          await loadRemoteState();
+          render();
+        } else { render(); }
       });
       return true;
     } catch (e) {
@@ -2473,19 +2510,39 @@
 
   async function loadRemoteState() {
     try {
-      const ref = db.collection('nurseflow').doc(currentUser.uid);
-      const snap = await ref.get();
-      if (snap.exists && snap.data() && snap.data().state) {
-        state = normalizeState(snap.data().state);
+      if (SHARED_WORKSPACE) {
+        await loadSharedState();
       } else {
-        state = seedState();
-        await ref.set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        const ref = db.collection('nurseflow').doc(currentUser.uid);
+        const snap = await ref.get();
+        if (snap.exists && snap.data() && snap.data().state) {
+          state = normalizeState(snap.data().state);
+        } else {
+          state = seedState();
+          await ref.set({ state: state, updatedAt: serverTs() });
+        }
       }
     } catch (e) {
       console.warn('Lettura Firestore fallita, uso cache locale:', e && e.message);
       state = loadState();
     }
     state.nurses.forEach((n) => { n.status = deriveStatus(n); });
+  }
+
+  // Shared team workspace: cases and settings come from two separate documents.
+  // UI preferences (view, selection, language, theme) stay local — they're not shared.
+  async function loadSharedState() {
+    const data = db.collection('organizations').doc(ORG_ID).collection('data');
+    const seed = seedState();
+    const [casesSnap, settingsSnap] = await Promise.all([data.doc('cases').get(), data.doc('settings').get()]);
+    state = seed;
+    if (casesSnap.exists && Array.isArray(casesSnap.data().nurses)) state.nurses = casesSnap.data().nurses;
+    if (settingsSnap.exists && settingsSnap.data().settings) state.settings = settingsSnap.data().settings;
+    normalizeState(state);
+    state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
+    // First-run initialization: seed the shared docs (writes succeed only for an admin).
+    if (!casesSnap.exists) data.doc('cases').set({ nurses: state.nurses, updatedAt: serverTs() }, { merge: true }).catch(() => {});
+    if (!settingsSnap.exists && isAdmin()) data.doc('settings').set({ settings: state.settings, updatedAt: serverTs() }, { merge: true }).catch(() => {});
   }
 
   // =====================================================================================
