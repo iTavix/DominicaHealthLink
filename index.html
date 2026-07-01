@@ -300,6 +300,11 @@
       dash_title:'Dashboard Analitica', dash_subtitle:'Visione globale del pipeline di trasferimento.',
       kpi_active:'Pratiche Attive', kpi_active_sub:'In lavorazione (step 1–10)', kpi_missing:'Documenti Mancanti', kpi_missing_sub:'Candidati con doc. da caricare',
       kpi_opi:'In attesa OPI', kpi_opi_sub:'Pronti / in iscrizione albo', kpi_done:'Onboarding Completati', kpi_done_sub:'Integrazione conclusa',
+      summary_title:'Riepilogo Trasferimenti', summary_hint:'Colpo d’occhio: quanti in gestione, mandati e da mandare',
+      kpi_treating:'In Gestione', kpi_treating_sub:'Infermieri che stiamo seguendo (totale)',
+      kpi_sent:'Mandati in Italia', kpi_sent_sub:'Arrivati o in onboarding (step 10–11)',
+      kpi_tosend:'Ancora da Mandare', kpi_tosend_sub:'In pipeline, non ancora partiti (step 1–9)',
+      filter_sent:'Mandati in Italia', filter_tosend:'Da mandare', clear_filter:'Rimuovi filtro',
       risk_title:'Semafori di Rischio', risk_hint:'Pratiche ferme oltre la soglia SLA', risk_none:'Nessuna pratica bloccata oltre i tempi previsti. Ottimo lavoro.',
       risk_stuck_in:'Bloccato in «{state}»', days_short:'gg', sla_short:'SLA {n} gg',
       struct_title:'Candidati per Struttura', onboard_abbr:'onboard.', candidate_one:'candidato', candidate_many:'candidati', pipeline_title:'Distribuzione nel Workflow (11 stati)',
@@ -364,6 +369,11 @@
       dash_title:'Analytics Dashboard', dash_subtitle:'Global view of the transfer pipeline.',
       kpi_active:'Active Cases', kpi_active_sub:'In progress (steps 1–10)', kpi_missing:'Missing Documents', kpi_missing_sub:'Candidates with docs to upload',
       kpi_opi:'Awaiting OPI', kpi_opi_sub:'Ready / registering', kpi_done:'Onboarding Completed', kpi_done_sub:'Integration completed',
+      summary_title:'Transfer Summary', summary_hint:'At a glance: how many in progress, sent and still to send',
+      kpi_treating:'Under Management', kpi_treating_sub:'Nurses we are handling (total)',
+      kpi_sent:'Sent to Italy', kpi_sent_sub:'Arrived or onboarding (steps 10–11)',
+      kpi_tosend:'Still to Send', kpi_tosend_sub:'In pipeline, not yet departed (steps 1–9)',
+      filter_sent:'Sent to Italy', filter_tosend:'To send', clear_filter:'Clear filter',
       risk_title:'Risk Alerts', risk_hint:'Cases stuck beyond the SLA threshold', risk_none:'No cases stuck beyond expected times. Great job.',
       risk_stuck_in:'Stuck in “{state}”', days_short:'d', sla_short:'SLA {n}d',
       struct_title:'Candidates per Facility', onboard_abbr:'onboard.', candidate_one:'candidate', candidate_many:'candidates', pipeline_title:'Workflow Distribution (11 states)',
@@ -427,6 +437,11 @@
       dash_title:'Panel Analítico', dash_subtitle:'Visión global del proceso de traslado.',
       kpi_active:'Expedientes Activos', kpi_active_sub:'En curso (pasos 1–10)', kpi_missing:'Documentos Faltantes', kpi_missing_sub:'Candidatos con docs por subir',
       kpi_opi:'En espera OPI', kpi_opi_sub:'Listos / en inscripción', kpi_done:'Onboarding Completado', kpi_done_sub:'Integración concluida',
+      summary_title:'Resumen de Traslados', summary_hint:'De un vistazo: cuántos en gestión, enviados y por enviar',
+      kpi_treating:'En Gestión', kpi_treating_sub:'Enfermeros que seguimos (total)',
+      kpi_sent:'Enviados a Italia', kpi_sent_sub:'Llegados o en onboarding (pasos 10–11)',
+      kpi_tosend:'Aún por Enviar', kpi_tosend_sub:'En pipeline, aún no partidos (pasos 1–9)',
+      filter_sent:'Enviados a Italia', filter_tosend:'Por enviar', clear_filter:'Quitar filtro',
       risk_title:'Semáforos de Riesgo', risk_hint:'Expedientes detenidos más allá del SLA', risk_none:'Ningún expediente detenido más de lo previsto. ¡Buen trabajo!',
       risk_stuck_in:'Detenido en «{state}»', days_short:'d', sla_short:'SLA {n}d',
       struct_title:'Candidatos por Estructura', onboard_abbr:'onboard.', candidate_one:'candidato', candidate_many:'candidatos', pipeline_title:'Distribución en el Flujo (11 estados)',
@@ -799,6 +814,9 @@
     return daysBetween(nurse.lastUpdate) > sla;
   }
 
+  // A candidate is considered "sent to Italy" once they arrive in Italy (step 10) or complete onboarding (step 11).
+  const SENT_TO_ITALY_STEP = 10;
+
   function computeKpis() {
     const active = state.nurses.filter((n) => n.currentStep < 11).length;
     const missing = state.nurses.filter((n) => n.documents.some((d) => d.status === 'missing')).length;
@@ -806,7 +824,11 @@
     const opi = state.nurses.filter((n) => n.currentStep === 8 || n.currentStep === 9).length;
     const completed = state.nurses.filter((n) => n.currentStep >= 11).length;
     const expiring = computeExpiring().length;
-    return { active, missing, opi, completed, expiring };
+    // Transfer summary: total under management, sent to Italy, still to send.
+    const treating = state.nurses.length;
+    const sent = state.nurses.filter((n) => n.currentStep >= SENT_TO_ITALY_STEP).length;
+    const toSend = state.nurses.filter((n) => n.currentStep < SENT_TO_ITALY_STEP).length;
+    return { active, missing, opi, completed, expiring, treating, sent, toSend };
   }
 
   // Documents that are expired or expiring within 60 days, across all candidates.
@@ -1625,17 +1647,26 @@
       <section id="dashboard" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Dashboard Analitica</h2>
         <p class="text-sm leading-relaxed text-slate-600">La prima schermata: per capire <b>in pochi secondi</b> lo stato generale del lavoro.</p>
-        <h3 id="kpi" class="pt-2 text-base font-bold text-slate-800">4.1 · Indicatori chiave (KPI)</h3>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Pratiche Attive</p><p class="mt-1 text-xs text-slate-500">Candidati in lavorazione (stati 1–10).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Documenti Mancanti</p><p class="mt-1 text-xs text-slate-500">Con almeno un documento da caricare.</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">In attesa OPI</p><p class="mt-1 text-xs text-slate-500">Pronti o in iscrizione all'albo OPI.</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Doc. in Scadenza</p><p class="mt-1 text-xs text-slate-500">Scaduti o entro 60 giorni. Cliccabile.</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Onboarding Completati</p><p class="mt-1 text-xs text-slate-500">Percorso concluso.</p></div>
+        <h3 id="riepilogo" class="pt-2 text-base font-bold text-slate-800">4.1 · Riepilogo Trasferimenti</h3>
+        <p class="text-sm leading-relaxed text-slate-600">In cima alla dashboard trovi il colpo d'occhio richiesto più spesso: <b>quanti infermieri stiamo trattando</b>, quanti sono <b>stati mandati in Italia</b> e quanti <b>devono ancora andare</b>. Vale sempre la relazione: <b>In Gestione = Mandati in Italia + Ancora da Mandare</b>.</p>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">In Gestione</p><p class="mt-1 text-xs text-slate-500">Totale infermieri che stiamo seguendo (tutte le pratiche presenti).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Mandati in Italia</p><p class="mt-1 text-xs text-slate-500">Chi è già partito: <b>Arrivo in Italia</b> (stato 10) oppure <b>Onboarding completato</b> (stato 11).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Ancora da Mandare</p><p class="mt-1 text-xs text-slate-500">Ancora nel percorso, non ancora partiti (stati 1–9).</p></div>
         </div>
-        <h3 id="rischio" class="pt-2 text-base font-bold text-slate-800">4.2 · Semafori di Rischio e Scadenze</h3>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Suggerimento.</b> Ogni riquadro è <b>cliccabile</b>: ti porta direttamente in <b>Gestione Pratiche</b> già filtrato (es. "Mandati in Italia" mostra solo chi è partito).</div>
+        <h3 id="kpi" class="pt-2 text-base font-bold text-slate-800">4.2 · Indicatori chiave (KPI)</h3>
+        <p class="text-sm leading-relaxed text-slate-600"><b>Tutti i KPI sono cliccabili</b> e aprono la sezione corrispondente già filtrata.</p>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Pratiche Attive</p><p class="mt-1 text-xs text-slate-500">Candidati in lavorazione (stati 1–10). → apre le pratiche attive.</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Documenti Mancanti</p><p class="mt-1 text-xs text-slate-500">Con almeno un documento da caricare. → apre le pratiche con doc. mancanti.</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">In attesa OPI</p><p class="mt-1 text-xs text-slate-500">Pronti o in iscrizione all'albo OPI. → apre le pratiche in attesa OPI.</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Doc. in Scadenza</p><p class="mt-1 text-xs text-slate-500">Scaduti o entro 60 giorni. → apre l'Archivio Documenti filtrato.</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Onboarding Completati</p><p class="mt-1 text-xs text-slate-500">Percorso concluso. → apre le pratiche completate.</p></div>
+        </div>
+        <h3 id="rischio" class="pt-2 text-base font-bold text-slate-800">4.3 · Semafori di Rischio e Scadenze</h3>
         <p class="text-sm leading-relaxed text-slate-600">Elenca le pratiche ferme <b>troppo a lungo</b> nello stato attuale, e un pannello con i <b>documenti in scadenza/scaduti</b>. <b>Azione:</b> clicca la riga per aprire la pratica; il KPI "Doc. in Scadenza" apre l'archivio filtrato.</p>
-        <h3 id="strutture" class="pt-2 text-base font-bold text-slate-800">4.3 · Candidati per Struttura</h3>
+        <h3 id="strutture" class="pt-2 text-base font-bold text-slate-800">4.4 · Candidati per Struttura</h3>
         <p class="text-sm leading-relaxed text-slate-600">Mostra quanti candidati sono assegnati a ciascun datore di lavoro e quanti hanno completato l'onboarding. In fondo, la distribuzione nei 11 stati.</p>
       </section>
 
@@ -1645,7 +1676,7 @@
         <h3 class="pt-2 text-base font-bold text-slate-800">5.1 · Elenco e ricerca</h3>
         <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
           <li><b>Ricerca:</b> per nome, passaporto o struttura di destinazione.</li>
-          <li><b>Filtri di stato:</b> Tutti, Doc. Mancanti, In corso, Visto, Completati.</li>
+          <li><b>Filtri di stato:</b> Tutti, <b>Mandati in Italia</b>, <b>Da mandare</b>, A rischio, Doc. Mancanti, In corso, Visto, Completati. Arrivando da un KPI (es. "In attesa OPI") compare un filtro temporaneo evidenziato, con la ✕ per rimuoverlo.</li>
           <li><b>Scheda:</b> mostra badge di stato, livello linguistico e step. L'icona ⏰ segnala un rischio ritardo.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.2 · Lo stepper (timeline 11 stati)</h3>
@@ -1849,11 +1880,19 @@
       <section id="dashboard" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Analytics Dashboard</h2>
         <p class="text-sm leading-relaxed text-slate-600">The first screen: to understand the overall workload <b>in seconds</b>.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Key indicators (KPI)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Active Cases, Missing Documents, Awaiting OPI, Expiring Docs (clickable), Onboarding Completed.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Risk alerts &amp; expiries</h3>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Transfer Summary</h3>
+        <p class="text-sm leading-relaxed text-slate-600">At the top you get the most-asked figures at a glance: <b>how many nurses we are handling</b>, how many have been <b>sent to Italy</b>, and how many <b>still have to go</b>. The relationship always holds: <b>Under Management = Sent to Italy + Still to Send</b>.</p>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Under Management</p><p class="mt-1 text-xs text-slate-500">Total nurses we are handling (all existing cases).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Sent to Italy</p><p class="mt-1 text-xs text-slate-500">Already departed: <b>Arrival in Italy</b> (state 10) or <b>Onboarding completed</b> (state 11).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Still to Send</p><p class="mt-1 text-xs text-slate-500">Still in the pipeline, not yet departed (states 1–9).</p></div>
+        </div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Tip.</b> Each tile is <b>clickable</b>: it opens <b>Case Management</b> already filtered (e.g. "Sent to Italy" shows only those who departed).</div>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Key indicators (KPI)</h3>
+        <p class="text-sm leading-relaxed text-slate-600"><b>All KPIs are clickable</b> and open the matching section already filtered: Active Cases, Missing Documents, Awaiting OPI, Expiring Docs, Onboarding Completed.</p>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Risk alerts &amp; expiries</h3>
         <p class="text-sm leading-relaxed text-slate-600">Lists cases stuck <b>too long</b> in their current state, plus a panel of <b>expiring/expired documents</b>. <b>Action:</b> click a row to open the case; the "Expiring Docs" KPI opens the filtered archive.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Candidates per facility</h3>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.4 · Candidates per facility</h3>
         <p class="text-sm leading-relaxed text-slate-600">Shows how many candidates are assigned to each employer and how many have completed onboarding, plus the distribution across the 11 states.</p>
       </section>
 
@@ -1863,7 +1902,7 @@
         <h3 class="pt-2 text-base font-bold text-slate-800">5.1 · List and search</h3>
         <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
           <li><b>Search:</b> by name, passport or destination facility.</li>
-          <li><b>Status filters:</b> All, At risk, Missing Docs, In progress, Visa, Completed.</li>
+          <li><b>Status filters:</b> All, <b>Sent to Italy</b>, <b>To send</b>, At risk, Missing Docs, In progress, Visa, Completed. Coming from a KPI (e.g. "Awaiting OPI") a temporary highlighted filter appears, with an ✕ to clear it.</li>
           <li><b>Card:</b> shows the status badge, language level and step. The ⏰ icon flags a delay risk.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.2 · The stepper (11-state timeline)</h3>
@@ -2066,11 +2105,19 @@
       <section id="dashboard" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Panel Analítico</h2>
         <p class="text-sm leading-relaxed text-slate-600">La primera pantalla: para entender la carga de trabajo general <b>en segundos</b>.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Indicadores clave (KPI)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Expedientes Activos, Documentos Faltantes, En espera OPI, Docs por Vencer (clicable), Onboarding Completado.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Semáforos de riesgo y vencimientos</h3>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Resumen de Traslados</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Arriba tienes de un vistazo las cifras más consultadas: <b>cuántos enfermeros estamos gestionando</b>, cuántos han sido <b>enviados a Italia</b> y cuántos <b>aún deben ir</b>. Siempre se cumple: <b>En Gestión = Enviados a Italia + Aún por Enviar</b>.</p>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">En Gestión</p><p class="mt-1 text-xs text-slate-500">Total de enfermeros que seguimos (todos los expedientes).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Enviados a Italia</p><p class="mt-1 text-xs text-slate-500">Ya partieron: <b>Llegada a Italia</b> (estado 10) u <b>Onboarding completado</b> (estado 11).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Aún por Enviar</p><p class="mt-1 text-xs text-slate-500">Todavía en el proceso, aún no partidos (estados 1–9).</p></div>
+        </div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Consejo.</b> Cada recuadro es <b>clicable</b>: abre <b>Gestión de Expedientes</b> ya filtrado (p. ej. "Enviados a Italia" muestra solo quienes partieron).</div>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Indicadores clave (KPI)</h3>
+        <p class="text-sm leading-relaxed text-slate-600"><b>Todos los KPI son clicables</b> y abren la sección correspondiente ya filtrada: Expedientes Activos, Documentos Faltantes, En espera OPI, Docs por Vencer, Onboarding Completado.</p>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Semáforos de riesgo y vencimientos</h3>
         <p class="text-sm leading-relaxed text-slate-600">Lista los expedientes detenidos <b>demasiado tiempo</b> en su estado actual, y un panel de <b>documentos por vencer/vencidos</b>. <b>Acción:</b> haz clic en una fila para abrir el expediente; el KPI "Docs por Vencer" abre el archivo filtrado.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Candidatos por estructura</h3>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.4 · Candidatos por estructura</h3>
         <p class="text-sm leading-relaxed text-slate-600">Muestra cuántos candidatos están asignados a cada empleador y cuántos han completado el onboarding, además de la distribución en los 11 estados.</p>
       </section>
 
@@ -2080,7 +2127,7 @@
         <h3 class="pt-2 text-base font-bold text-slate-800">5.1 · Lista y búsqueda</h3>
         <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
           <li><b>Búsqueda:</b> por nombre, pasaporte o estructura de destino.</li>
-          <li><b>Filtros de estado:</b> Todos, En riesgo, Docs Faltantes, En curso, Visado, Completados.</li>
+          <li><b>Filtros de estado:</b> Todos, <b>Enviados a Italia</b>, <b>Por enviar</b>, En riesgo, Docs Faltantes, En curso, Visado, Completados. Al venir de un KPI (p. ej. "En espera OPI") aparece un filtro temporal resaltado, con la ✕ para quitarlo.</li>
           <li><b>Ficha:</b> muestra el estado, el nivel lingüístico y el paso. El icono ⏰ señala riesgo de retraso.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.2 · El stepper (línea de 11 estados)</h3>
@@ -2326,7 +2373,7 @@
   }
 
   // ------------------------------------------------------------------ DASHBOARD
-  function kpiCard(icon, label, value, tone, sub, action) {
+  function kpiCard(icon, label, value, tone, sub, action, filter) {
     const tones = {
       indigo: 'from-indigo-500 to-indigo-600 shadow-indigo-200',
       rose: 'from-rose-500 to-rose-600 shadow-rose-200',
@@ -2334,7 +2381,7 @@
       emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-200',
     };
     const tag = action ? 'button' : 'div';
-    const attrs = action ? ' data-action="' + action + '" class="w-full text-left ' : ' class="';
+    const attrs = action ? ' data-action="' + action + '"' + (filter ? ' data-filter="' + escapeHtml(filter) + '"' : '') + ' class="w-full text-left ' : ' class="';
     return '<' + tag + attrs + 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md' + (action ? ' hover:border-indigo-200' : '') + '">' +
       '<div class="flex items-start justify-between">' +
         '<div>' +
@@ -2345,6 +2392,19 @@
         '<div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ' + tones[tone] + ' text-white shadow-lg"><i data-lucide="' + icon + '" class="h-5 w-5"></i></div>' +
       '</div>' +
     '</' + tag + '>';
+  }
+
+  // Big, at-a-glance transfer tiles (clickable → filtered Case Management).
+  function summaryTile(icon, tone, label, value, sub, filter) {
+    const tones = { indigo: 'bg-indigo-100 text-indigo-600', emerald: 'bg-emerald-100 text-emerald-600', amber: 'bg-amber-100 text-amber-600' };
+    return '<button data-action="goto-cases" data-filter="' + filter + '" class="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md active:scale-[.99]">' +
+      '<span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ' + tones[tone] + '"><i data-lucide="' + icon + '" class="h-6 w-6"></i></span>' +
+      '<div class="min-w-0">' +
+        '<p class="text-3xl font-extrabold leading-none text-slate-900">' + value + '</p>' +
+        '<p class="mt-1 text-sm font-semibold text-slate-700">' + label + '</p>' +
+        '<p class="text-[11px] text-slate-400">' + sub + '</p>' +
+      '</div>' +
+    '</button>';
   }
 
   function dashboardView() {
@@ -2416,12 +2476,25 @@
         (isAdmin() ? '<button data-action="export-csv" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 shadow-sm transition hover:bg-slate-50"><i data-lucide="download" class="h-3.5 w-3.5"></i>' + t('export_csv') + '</button>' : '') +
       '</div>' +
 
+      '<section data-tour="summary" class="mb-6 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm">' +
+        '<div class="mb-4 flex items-center gap-2">' +
+          '<i data-lucide="plane-takeoff" class="h-5 w-5 text-indigo-500"></i>' +
+          '<h3 class="text-sm font-bold text-slate-900">' + t('summary_title') + '</h3>' +
+          '<span class="ml-auto hidden text-xs text-slate-400 sm:block">' + t('summary_hint') + '</span>' +
+        '</div>' +
+        '<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">' +
+          summaryTile('users', 'indigo', t('kpi_treating'), k.treating, t('kpi_treating_sub'), 'all') +
+          summaryTile('plane-landing', 'emerald', t('kpi_sent'), k.sent, t('kpi_sent_sub'), 'sent') +
+          summaryTile('hourglass', 'amber', t('kpi_tosend'), k.toSend, t('kpi_tosend_sub'), 'tosend') +
+        '</div>' +
+      '</section>' +
+
       '<div data-tour="kpi" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">' +
-        kpiCard('users-round', t('kpi_active'), k.active, 'indigo', t('kpi_active_sub')) +
-        kpiCard('file-warning', t('kpi_missing'), k.missing, 'rose', t('kpi_missing_sub')) +
-        kpiCard('clipboard-check', t('kpi_opi'), k.opi, 'amber', t('kpi_opi_sub')) +
+        kpiCard('users-round', t('kpi_active'), k.active, 'indigo', t('kpi_active_sub'), 'goto-cases', 'active') +
+        kpiCard('file-warning', t('kpi_missing'), k.missing, 'rose', t('kpi_missing_sub'), 'goto-cases', 'Missing Docs') +
+        kpiCard('clipboard-check', t('kpi_opi'), k.opi, 'amber', t('kpi_opi_sub'), 'goto-cases', 'opi') +
         kpiCard('calendar-clock', t('kpi_expiring'), k.expiring, k.expiring ? 'rose' : 'emerald', t('kpi_expiring_sub'), 'show-expiring') +
-        kpiCard('badge-check', t('kpi_done'), k.completed, 'emerald', t('kpi_done_sub')) +
+        kpiCard('badge-check', t('kpi_done'), k.completed, 'emerald', t('kpi_done_sub'), 'goto-cases', 'Onboarding Completed') +
       '</div>' +
 
       '<div class="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">' +
@@ -2473,8 +2546,13 @@
   function filteredNurses() {
     const q = state.search.trim().toLowerCase();
     return state.nurses.filter((n) => {
-      if (state.statusFilter === 'risk') { if (!isAtRisk(n)) return false; }
-      else if (state.statusFilter !== 'all' && deriveStatus(n) !== state.statusFilter) return false;
+      const f = state.statusFilter;
+      if (f === 'risk') { if (!isAtRisk(n)) return false; }
+      else if (f === 'sent') { if (!(n.currentStep >= SENT_TO_ITALY_STEP)) return false; }
+      else if (f === 'tosend') { if (!(n.currentStep < SENT_TO_ITALY_STEP)) return false; }
+      else if (f === 'active') { if (!(n.currentStep < 11)) return false; }
+      else if (f === 'opi') { if (!(n.currentStep === 8 || n.currentStep === 9)) return false; }
+      else if (f !== 'all' && deriveStatus(n) !== f) return false;
       if (!q) return true;
       return (
         n.name.toLowerCase().includes(q) ||
@@ -2489,6 +2567,19 @@
       masterList() +
       detailPanel() +
     '</div>';
+  }
+
+  // Filters reachable from the chip row directly. Others (set from dashboard KPIs, e.g. 'active'/'opi')
+  // are shown as a temporary, removable highlighted chip so the user always sees what is filtered.
+  const STANDARD_FILTERS = ['all', 'risk', 'sent', 'tosend', 'Missing Docs', 'In Progress', 'Visa Obtained', 'Onboarding Completed'];
+  function activeFilterLabel(f) {
+    const map = { active: t('kpi_active'), opi: t('kpi_opi') };
+    return map[f] || f;
+  }
+  function extraFilterChip() {
+    const f = state.statusFilter;
+    if (STANDARD_FILTERS.indexOf(f) >= 0) return '';
+    return '<button data-action="set-filter" data-filter="all" class="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white shadow-sm" data-tooltip="' + escapeHtml(t('clear_filter')) + '">' + escapeHtml(activeFilterLabel(f)) + '<i data-lucide="x" class="h-3 w-3"></i></button>';
   }
 
   function masterList() {
@@ -2528,7 +2619,10 @@
             'class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
         '</div>' +
         '<div class="mb-3 flex flex-wrap gap-1.5">' +
+          extraFilterChip() +
           filterChip('all', t('filter_all')) +
+          filterChip('sent', t('filter_sent')) +
+          filterChip('tosend', t('filter_tosend')) +
           filterChip('risk', t('risk_filter')) +
           filterChip('Missing Docs', t('filter_missing')) +
           filterChip('In Progress', t('filter_progress')) +
@@ -3085,6 +3179,7 @@
       case 'delete-nurse': deleteNurse(t.getAttribute('data-id')); break;
       case 'export-csv': exportCandidatesCsv(); break;
       case 'show-expiring': state.view = 'documents'; state.docFilter = 'expiring'; commit(); break;
+      case 'goto-cases': state.statusFilter = t.getAttribute('data-filter') || 'all'; state.selectedNurseId = null; state.view = 'cases'; commit(); break;
       case 'reset': resetData(); break;
       case 'start-tour': startTour(); break;
       case 'tour-next': tourNext(); break;
