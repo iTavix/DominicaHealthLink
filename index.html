@@ -327,6 +327,9 @@
       f_name:'Nome', f_country:'Paese', f_contact:'Contatto', f_city:'Città', f_role:'Ruolo',
       new_agency:'Nuova agenzia', new_employer:'Nuova struttura', new_operator:'Nuovo operatore', select_none:'— Nessuno / libero —', risk_filter:'A rischio',
       manual_title:'Manuale Operatore', manual_index:'Indice',
+      nav_docs:'Documenti', archive_title:'Archivio Documenti', archive_sub:'Tutti i documenti dei candidati, con anteprima integrata.', archive_empty:'Nessun documento trovato.', col_candidate:'Candidato', doc_no_file:'Nessun file', doc_view:'Visualizza', archive_search_ph:'Cerca per candidato o documento…', filter_withfile:'Con file',
+      filter_expiring:'In scadenza', exp_expired:'Scaduto', exp_soon:'In scadenza', export_csv:'Esporta CSV', del_candidate:'Elimina candidato', confirm_delete_nurse:'Eliminare definitivamente «{x}» e tutti i suoi dati? L’operazione non è reversibile.',
+      kpi_expiring:'Doc. in Scadenza', kpi_expiring_sub:'Scaduti o entro 60 giorni', exp_panel_title:'Documenti in Scadenza', exp_panel_none:'Nessun documento in scadenza. Tutto in regola.', exp_see_all:'Vedi tutti', valid_until:'Scade il {d}',
       set_doctypes:'Tipi di Documento', set_doctypes_desc:'Documenti richiesti di default a ogni nuovo candidato.', new_doctype:'Nuovo tipo di documento',
       access_role:'Ruolo di accesso', role_admin:'Amministratore', role_operator:'Operatore', f_email:'Email', prof_role:'Ruolo', demo_role_hint:'In modalità demo puoi simulare il ruolo per provare i permessi.',
       set_operators_desc2:'Referenti interni che seguono le pratiche. Assegna email e ruolo di accesso per gestire i permessi.',
@@ -388,6 +391,9 @@
       f_name:'Name', f_country:'Country', f_contact:'Contact', f_city:'City', f_role:'Role',
       new_agency:'New agency', new_employer:'New facility', new_operator:'New operator', select_none:'— None / free text —', risk_filter:'At risk',
       manual_title:'Operator Manual', manual_index:'Index',
+      nav_docs:'Documents', archive_title:'Document Archive', archive_sub:'All candidate documents, with built-in preview.', archive_empty:'No documents found.', col_candidate:'Candidate', doc_no_file:'No file', doc_view:'View', archive_search_ph:'Search by candidate or document…', filter_withfile:'With file',
+      filter_expiring:'Expiring', exp_expired:'Expired', exp_soon:'Expiring', export_csv:'Export CSV', del_candidate:'Delete candidate', confirm_delete_nurse:'Permanently delete “{x}” and all their data? This cannot be undone.',
+      kpi_expiring:'Expiring Docs', kpi_expiring_sub:'Expired or within 60 days', exp_panel_title:'Expiring Documents', exp_panel_none:'No expiring documents. All good.', exp_see_all:'See all', valid_until:'Expires {d}',
       set_doctypes:'Document Types', set_doctypes_desc:'Documents required by default for every new candidate.', new_doctype:'New document type',
       access_role:'Access role', role_admin:'Administrator', role_operator:'Operator', f_email:'Email', prof_role:'Role', demo_role_hint:'In demo mode you can simulate the role to try out permissions.',
     },
@@ -448,6 +454,9 @@
       f_name:'Nombre', f_country:'País', f_contact:'Contacto', f_city:'Ciudad', f_role:'Rol',
       new_agency:'Nueva agencia', new_employer:'Nueva estructura', new_operator:'Nuevo operador', select_none:'— Ninguno / libre —', risk_filter:'En riesgo',
       manual_title:'Manual del Operador', manual_index:'Índice',
+      nav_docs:'Documentos', archive_title:'Archivo de Documentos', archive_sub:'Todos los documentos de los candidatos, con vista previa integrada.', archive_empty:'No se encontraron documentos.', col_candidate:'Candidato', doc_no_file:'Sin archivo', doc_view:'Ver', archive_search_ph:'Buscar por candidato o documento…', filter_withfile:'Con archivo',
+      filter_expiring:'Por vencer', exp_expired:'Vencido', exp_soon:'Por vencer', export_csv:'Exportar CSV', del_candidate:'Eliminar candidato', confirm_delete_nurse:'¿Eliminar definitivamente «{x}» y todos sus datos? Esta acción no se puede deshacer.',
+      kpi_expiring:'Docs por Vencer', kpi_expiring_sub:'Vencidos o dentro de 60 días', exp_panel_title:'Documentos por Vencer', exp_panel_none:'Ningún documento por vencer. Todo en regla.', exp_see_all:'Ver todos', valid_until:'Vence el {d}',
       set_doctypes:'Tipos de Documento', set_doctypes_desc:'Documentos requeridos por defecto en cada nuevo candidato.', new_doctype:'Nuevo tipo de documento',
       access_role:'Rol de acceso', role_admin:'Administrador', role_operator:'Operador', f_email:'Correo', prof_role:'Rol', demo_role_hint:'En modo demo puedes simular el rol para probar los permisos.',
     },
@@ -773,7 +782,22 @@
     // Pending OPI: cases that obtained the visa or are at the OPI-registration step.
     const opi = state.nurses.filter((n) => n.currentStep === 8 || n.currentStep === 9).length;
     const completed = state.nurses.filter((n) => n.currentStep >= 11).length;
-    return { active, missing, opi, completed };
+    const expiring = computeExpiring().length;
+    return { active, missing, opi, completed, expiring };
+  }
+
+  // Documents that are expired or expiring within 60 days, across all candidates.
+  function computeExpiring() {
+    const list = [];
+    state.nurses.forEach((n) => (n.documents || []).forEach((d) => {
+      const ex = docExpiry(d);
+      if (ex === 'expired' || ex === 'soon') list.push({ n: n, d: d, ex: ex });
+    }));
+    list.sort((a, b) => {
+      if (a.ex !== b.ex) return a.ex === 'expired' ? -1 : 1;
+      return String(a.d.validity).localeCompare(String(b.d.validity));
+    });
+    return list;
   }
 
   function employerBreakdown() {
@@ -929,13 +953,13 @@
     ];
   }
 
-  function modalShell(inner) {
+  function modalShell(inner, wide) {
     closeModal();
     const wrap = document.createElement('div');
     wrap.id = 'modal-layer';
     wrap.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4';
     wrap.style.backdropFilter = 'blur(2px)';
-    wrap.innerHTML = '<div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl animate-fadeIn">' + inner + '</div>';
+    wrap.innerHTML = '<div class="max-h-[92vh] w-full ' + (wide ? 'max-w-3xl' : 'max-w-lg') + ' overflow-y-auto rounded-2xl bg-white shadow-2xl animate-fadeIn">' + inner + '</div>';
     document.body.appendChild(wrap);
     lucide.createIcons();
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) closeModal(); });
@@ -969,9 +993,12 @@
         selectField('nn-employer', t('nn_employer'), employerOptions(), e ? e.employer : '') +
         '<div class="sm:col-span-2">' + selectField('nn-hr', t('nn_hr'), operatorOptions(), e ? e.hrReferent : '') + '</div>' +
       '</div>' +
-      '<div class="flex justify-end gap-2 border-t border-slate-100 p-5">' +
-        '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">' + t('cancel') + '</button>' +
-        '<button data-action="create-nurse" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>' + (e ? t('save') : t('nn_create')) + '</button>' +
+      '<div class="flex items-center justify-between gap-2 border-t border-slate-100 p-5">' +
+        (e && isAdmin() ? '<button data-action="delete-nurse" data-id="' + e.id + '" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"><i data-lucide="trash-2" class="h-4 w-4"></i>' + t('del_candidate') + '</button>' : '<span></span>') +
+        '<div class="flex gap-2">' +
+          '<button data-action="close-modal" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50">' + t('cancel') + '</button>' +
+          '<button data-action="create-nurse" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="check" class="h-4 w-4"></i>' + (e ? t('save') : t('nn_create')) + '</button>' +
+        '</div>' +
       '</div>';
     modalShell(inner);
     if (e) {
@@ -1064,6 +1091,146 @@
     relocationNurseId = null;
     closeModal();
     commit();
+  }
+
+  // ---------- Delete candidate, export, document expiry ----------
+  function deleteNurse(id) {
+    if (!isAdmin()) return;
+    const n = getNurse(id); if (!n) return;
+    if (!confirm(t('confirm_delete_nurse', { x: n.name }))) return;
+    state.nurses = state.nurses.filter((x) => x.id !== id);
+    if (state.selectedNurseId === id) state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
+    editNurseId = null;
+    closeModal();
+    commit();
+  }
+
+  function docExpiry(d) {
+    if (!d || !d.validity || d.validity === '—') return 'none';
+    const dt = new Date(d.validity);
+    if (isNaN(dt)) return 'none';
+    const days = Math.floor((dt - today()) / 86400000);
+    if (days < 0) return 'expired';
+    if (days <= 60) return 'soon';
+    return 'ok';
+  }
+
+  function csvCell(v) {
+    const s = (v == null ? '' : String(v));
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  function exportCandidatesCsv() {
+    if (!isAdmin()) return;
+    const headers = ['Nome', 'Passaporto', 'Origine', 'Agenzia', 'Livello linguistico', 'Datore di lavoro', 'Referente HR', 'Step', 'Stato', 'Ultimo aggiornamento', 'Documenti approvati', 'Documenti totali'];
+    const lines = [headers.map(csvCell).join(',')];
+    state.nurses.forEach((n) => {
+      const appr = (n.documents || []).filter((d) => d.status === 'approved').length;
+      lines.push([n.name, n.passport, n.origin, n.partnerAgency, n.languageLevel, n.employer, n.hrReferent,
+        n.currentStep + '/11', statusLabel(deriveStatus(n)), n.lastUpdate, appr, (n.documents || []).length].map(csvCell).join(','));
+    });
+    // BOM so Excel opens UTF-8 correctly.
+    downloadFile('candidati.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  }
+  function downloadFile(filename, content, mime) {
+    try {
+      const blob = new Blob([content], { type: mime || 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    } catch (e) { console.warn('Download fallito:', e && e.message); }
+  }
+
+  // ---------- Document archive & in-app preview ----------
+  function allDocs() {
+    const q = (state.docSearch || '').trim().toLowerCase();
+    const f = state.docFilter || 'all';
+    const rows = [];
+    state.nurses.forEach((n) => (n.documents || []).forEach((d) => {
+      if (f === 'withfile') { if (!d.fileName) return; }
+      else if (f === 'expiring') { const ex = docExpiry(d); if (ex !== 'expired' && ex !== 'soon') return; }
+      else if (f !== 'all' && d.status !== f) return;
+      if (q && !((n.name || '').toLowerCase().includes(q) || (d.name || '').toLowerCase().includes(q) || (d.fileName || '').toLowerCase().includes(q))) return;
+      rows.push({ n: n, d: d });
+    }));
+    return rows;
+  }
+  function fileKind(name, url) {
+    if (/\.(png|jpe?g|webp|gif|heic|heif|bmp)$/i.test(name || '') || /^data:image\//.test(url || '')) return 'image';
+    if (/\.pdf$/i.test(name || '') || /^data:application\/pdf/.test(url || '')) return 'pdf';
+    return 'other';
+  }
+  function openDocPreview(nurseId, docId) {
+    const n = getNurse(nurseId); const d = n && n.documents.find((x) => x.id === docId);
+    if (!d) return;
+    let inner;
+    if (!d.fileUrl) {
+      inner = '<div class="p-10 text-center text-sm text-slate-400"><i data-lucide="file-x" class="mx-auto mb-2 h-8 w-8 text-slate-300"></i>' + t('doc_no_file') + '</div>';
+    } else {
+      const kind = fileKind(d.fileName, d.fileUrl);
+      if (kind === 'image') inner = '<div class="flex justify-center bg-slate-100 p-4"><img src="' + escapeHtml(d.fileUrl) + '" alt="' + escapeHtml(d.fileName || '') + '" class="max-h-[70vh] rounded-lg object-contain" /></div>';
+      else if (kind === 'pdf') inner = '<iframe src="' + escapeHtml(d.fileUrl) + '" class="h-[72vh] w-full" title="' + escapeHtml(d.fileName || '') + '"></iframe>';
+      else inner = '<div class="p-10 text-center"><a href="' + escapeHtml(d.fileUrl) + '" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"><i data-lucide="download" class="h-4 w-4"></i>' + t('doc_view') + '</a></div>';
+    }
+    const head =
+      '<div class="flex items-center justify-between border-b border-slate-100 p-4">' +
+        '<div class="min-w-0"><p class="truncate text-sm font-bold text-slate-900">' + escapeHtml(d.name) + '</p>' +
+          '<p class="truncate text-xs text-slate-500">' + escapeHtml(n.name) + (d.fileName ? ' · ' + escapeHtml(d.fileName) : '') + '</p></div>' +
+        '<div class="flex items-center gap-2">' +
+          (d.fileUrl ? '<a href="' + escapeHtml(d.fileUrl) + '" target="_blank" rel="noopener" class="rounded-lg px-2 py-1 text-slate-400 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="external-link" class="h-4 w-4"></i></a>' : '') +
+          '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
+        '</div>' +
+      '</div>';
+    modalShell(head + inner, true);
+  }
+
+  function archiveBody() {
+    const list = allDocs();
+    const chip = (val, label) =>
+      '<button data-action="doc-filter" data-filter="' + val + '" class="rounded-full px-3 py-1 text-xs font-semibold transition ' +
+      ((state.docFilter || 'all') === val ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200') + '">' + label + '</button>';
+    const rows = list.length === 0
+      ? '<div class="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-400">' + t('archive_empty') + '</div>'
+      : '<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table class="w-full text-sm">' +
+          '<thead><tr class="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">' +
+            '<th class="px-4 py-2.5">' + t('col_candidate') + '</th><th class="px-2 py-2.5">' + t('th_document') + '</th><th class="px-2 py-2.5">' + t('th_lang') + '</th><th class="px-2 py-2.5">' + t('th_uploaded') + '</th><th class="px-2 py-2.5">' + t('th_status') + '</th><th class="px-4 py-2.5 text-right">' + t('th_actions') + '</th>' +
+          '</tr></thead><tbody>' +
+          list.map((it) => {
+            const d = it.d, n = it.n, m = DOC_STATUS_CLS[d.status], icon = DOC_STATUS_ICON[d.status];
+            const ex = docExpiry(d);
+            const exBadge = ex === 'expired'
+              ? ' <span class="inline-flex items-center gap-1 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 ring-1 ring-inset ring-rose-200"><i data-lucide="calendar-x" class="h-2.5 w-2.5"></i>' + t('exp_expired') + '</span>'
+              : ex === 'soon'
+                ? ' <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200"><i data-lucide="calendar-clock" class="h-2.5 w-2.5"></i>' + t('exp_soon') + '</span>'
+                : '';
+            const act = d.fileName
+              ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="eye" class="h-3 w-3"></i>' + t('doc_view') + '</button>'
+              : '<span class="text-xs text-slate-300">' + t('doc_no_file') + '</span>';
+            return '<tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">' +
+              '<td class="px-4 py-3"><button data-action="open-nurse" data-id="' + n.id + '" class="font-semibold text-slate-800 hover:text-indigo-600">' + escapeHtml(n.name) + '</button></td>' +
+              '<td class="px-2 py-3 text-slate-700">' + escapeHtml(d.name) + (d.fileName ? '<span class="ml-1 text-slate-300">·</span> <span class="text-[11px] text-slate-400">' + escapeHtml(d.fileName) + '</span>' : '') + '</td>' +
+              '<td class="px-2 py-3"><span class="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">' + escapeHtml(d.language) + '</span></td>' +
+              '<td class="px-2 py-3 text-xs text-slate-500">' + formatDate(d.uploadDate) + '</td>' +
+              '<td class="px-2 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' + m + '"><i data-lucide="' + icon + '" class="h-3 w-3"></i>' + docStatusLabel(d.status) + '</span>' + exBadge + '</td>' +
+              '<td class="px-4 py-3 text-right">' + act + '</td>' +
+            '</tr>';
+          }).join('') +
+          '</tbody></table></div>';
+    return '<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">' +
+        '<div class="relative sm:max-w-xs sm:flex-1">' +
+          '<i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"></i>' +
+          '<input id="doc-search-input" data-action="doc-search" type="text" value="' + escapeHtml(state.docSearch || '') + '" placeholder="' + escapeHtml(t('archive_search_ph')) + '" class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
+        '</div>' +
+        '<div class="flex flex-wrap gap-1.5">' + chip('all', t('filter_all')) + chip('withfile', t('filter_withfile')) + chip('expiring', t('filter_expiring')) + chip('approved', docStatusLabel('approved')) + chip('pending', docStatusLabel('pending')) + chip('missing', docStatusLabel('missing')) + '</div>' +
+      '</div>' + rows;
+  }
+  function archiveView() {
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+      '<div class="mb-6"><h2 class="text-xl font-extrabold text-slate-900">' + t('archive_title') + '</h2>' +
+      '<p class="text-sm text-slate-500">' + t('archive_sub') + '</p></div>' +
+      '<div id="archive-host">' + archiveBody() + '</div>' +
+    '</main>';
   }
 
   let pendingDocNurse = null;
@@ -1422,7 +1589,7 @@
         <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
           <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-4 py-2">Elemento</th><th class="px-4 py-2">A cosa serve</th></tr></thead>
           <tbody class="divide-y divide-slate-100">
-            <tr><td class="px-4 py-2.5 font-medium text-slate-700">Dashboard / Gestione Pratiche</td><td class="px-4 py-2.5 text-slate-600">I due interruttori per passare tra vista d'insieme e lavoro sul candidato.</td></tr>
+            <tr><td class="px-4 py-2.5 font-medium text-slate-700">Dashboard / Gestione Pratiche / Documenti / Impostazioni</td><td class="px-4 py-2.5 text-slate-600">Le viste: visione d'insieme, lavoro sul candidato, archivio documenti e (solo admin) anagrafiche di base.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">Badge "a rischio"</td><td class="px-4 py-2.5 text-slate-600">Conta le pratiche ferme oltre i tempi previsti. Verde = nessun rischio.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">Manuale</td><td class="px-4 py-2.5 text-slate-600">Apre questo documento.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">Guida</td><td class="px-4 py-2.5 text-slate-600">Avvia il tour interattivo a riflettore.</td></tr>
@@ -1440,10 +1607,11 @@
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Pratiche Attive</p><p class="mt-1 text-xs text-slate-500">Candidati in lavorazione (stati 1–10).</p></div>
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Documenti Mancanti</p><p class="mt-1 text-xs text-slate-500">Con almeno un documento da caricare.</p></div>
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">In attesa OPI</p><p class="mt-1 text-xs text-slate-500">Pronti o in iscrizione all'albo OPI.</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Doc. in Scadenza</p><p class="mt-1 text-xs text-slate-500">Scaduti o entro 60 giorni. Cliccabile.</p></div>
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-semibold uppercase text-slate-400">Onboarding Completati</p><p class="mt-1 text-xs text-slate-500">Percorso concluso.</p></div>
         </div>
-        <h3 id="rischio" class="pt-2 text-base font-bold text-slate-800">4.2 · Semafori di Rischio</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Elenca le pratiche ferme <b>troppo a lungo</b> nello stato attuale. <b>Azione:</b> clicca la riga per aprire la pratica e intervenire.</p>
+        <h3 id="rischio" class="pt-2 text-base font-bold text-slate-800">4.2 · Semafori di Rischio e Scadenze</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Elenca le pratiche ferme <b>troppo a lungo</b> nello stato attuale, e un pannello con i <b>documenti in scadenza/scaduti</b>. <b>Azione:</b> clicca la riga per aprire la pratica; il KPI "Doc. in Scadenza" apre l'archivio filtrato.</p>
         <h3 id="strutture" class="pt-2 text-base font-bold text-slate-800">4.3 · Candidati per Struttura</h3>
         <p class="text-sm leading-relaxed text-slate-600">Mostra quanti candidati sono assegnati a ciascun datore di lavoro e quanti hanno completato l'onboarding. In fondo, la distribuzione nei 11 stati.</p>
       </section>
@@ -1547,6 +1715,19 @@
             <li><b>Registra la chiamata</b> e aggiorna documenti/checklist: il contatore si azzera.</li>
           </ol>
         </div>
+
+        <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4">
+          <p class="text-sm font-bold text-emerald-800">Altre funzioni utili</p>
+          <ul class="prose-list mt-1 ml-5 list-disc text-sm text-emerald-900/80">
+            <li><b>Caricare un file:</b> nella scheda documenti premi <b>Carica</b> → si apre il selettore file del computer (PDF, foto, scansione). Il file resta allegato e diventa <b>Sostituisci</b> per cambiarlo.</li>
+            <li><b>Archivio Documenti</b> (scheda <b>Documenti</b> in alto): ritrova <b>tutti</b> i documenti di tutti i candidati, con ricerca e filtri. Clicca <b>Visualizza</b> per l'<b>anteprima</b> di immagini e PDF dentro l'app.</li>
+            <li><b>Scadenze:</b> i documenti con data di validità vengono segnalati con <span class="font-semibold text-amber-600">In scadenza</span> (entro 60 giorni) o <span class="font-semibold text-rose-600">Scaduto</span>. Usa il filtro <b>In scadenza</b> nell'archivio.</li>
+            <li><b>Modifica anagrafica:</b> pulsante <b>Modifica anagrafica</b> nell'intestazione del candidato per correggere i dati.</li>
+            <li><b>Logistica &amp; Onboarding:</b> pulsante <b>Modifica</b> per inserire volo, alloggio, tutor e stato del contratto.</li>
+            <li><b>Elimina candidato</b> (solo admin): dentro <b>Modifica anagrafica</b>, in basso a sinistra. Operazione non reversibile.</li>
+            <li><b>Esporta CSV</b> (solo admin): pulsante in alto a destra nella Dashboard, scarica l'elenco candidati (utile per report e backup).</li>
+          </ul>
+        </div>
       </section>
 
       <section id="dati" class="space-y-4">
@@ -1631,7 +1812,7 @@
         <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
           <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-4 py-2">Element</th><th class="px-4 py-2">Purpose</th></tr></thead>
           <tbody class="divide-y divide-slate-100">
-            <tr><td class="px-4 py-2.5 font-medium text-slate-700">Dashboard / Cases / Settings</td><td class="px-4 py-2.5 text-slate-600">The three views: overview, single-candidate work, and base records.</td></tr>
+            <tr><td class="px-4 py-2.5 font-medium text-slate-700">Dashboard / Cases / Documents / Settings</td><td class="px-4 py-2.5 text-slate-600">The views: overview, single-candidate work, document archive, and (admin only) base records.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">"At risk" badge</td><td class="px-4 py-2.5 text-slate-600">Counts cases stuck beyond expected times. Click it to open the at-risk list. Green = no risk.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">Theme toggle</td><td class="px-4 py-2.5 text-slate-600">Switch between light and dark mode.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">IT · EN · ES</td><td class="px-4 py-2.5 text-slate-600">Change the interface language.</td></tr>
@@ -1646,9 +1827,9 @@
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Analytics Dashboard</h2>
         <p class="text-sm leading-relaxed text-slate-600">The first screen: to understand the overall workload <b>in seconds</b>.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Key indicators (KPI)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Active Cases, Missing Documents, Awaiting OPI, Onboarding Completed.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Risk alerts</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Lists cases stuck <b>too long</b> in their current state. <b>Action:</b> click a row to open the case and act.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Active Cases, Missing Documents, Awaiting OPI, Expiring Docs (clickable), Onboarding Completed.</p>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Risk alerts &amp; expiries</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Lists cases stuck <b>too long</b> in their current state, plus a panel of <b>expiring/expired documents</b>. <b>Action:</b> click a row to open the case; the "Expiring Docs" KPI opens the filtered archive.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Candidates per facility</h3>
         <p class="text-sm leading-relaxed text-slate-600">Shows how many candidates are assigned to each employer and how many have completed onboarding, plus the distribution across the 11 states.</p>
       </section>
@@ -1751,6 +1932,19 @@
             <li><b>Log the call</b> and update documents/checklist: the day counter resets.</li>
           </ol>
         </div>
+
+        <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4">
+          <p class="text-sm font-bold text-emerald-800">Other useful features</p>
+          <ul class="prose-list mt-1 ml-5 list-disc text-sm text-emerald-900/80">
+            <li><b>Upload a file:</b> in the documents table press <b>Upload</b> → your computer's file picker opens (PDF, photo, scan). The file stays attached and the button becomes <b>Replace</b>.</li>
+            <li><b>Document Archive</b> (<b>Documents</b> tab): find <b>all</b> documents of all candidates, with search and filters. Click <b>View</b> for an in-app <b>preview</b> of images and PDFs.</li>
+            <li><b>Expiry:</b> documents with a validity date are flagged <span class="font-semibold text-amber-600">Expiring</span> (within 60 days) or <span class="font-semibold text-rose-600">Expired</span>. Use the <b>Expiring</b> filter in the archive.</li>
+            <li><b>Edit details:</b> the <b>Edit details</b> button on the candidate header to correct the data.</li>
+            <li><b>Logistics &amp; Onboarding:</b> the <b>Edit</b> button to enter flight, housing, tutor and contract status.</li>
+            <li><b>Delete candidate</b> (admin only): inside <b>Edit details</b>, bottom-left. This cannot be undone.</li>
+            <li><b>Export CSV</b> (admin only): button at the top-right of the Dashboard, downloads the candidate list (for reports and backup).</li>
+          </ul>
+        </div>
       </section>
 
       <section id="dati" class="space-y-4">
@@ -1835,7 +2029,7 @@
         <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
           <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-4 py-2">Elemento</th><th class="px-4 py-2">Función</th></tr></thead>
           <tbody class="divide-y divide-slate-100">
-            <tr><td class="px-4 py-2.5 font-medium text-slate-700">Panel / Expedientes / Ajustes</td><td class="px-4 py-2.5 text-slate-600">Las tres vistas: visión global, trabajo por candidato y registros base.</td></tr>
+            <tr><td class="px-4 py-2.5 font-medium text-slate-700">Panel / Expedientes / Documentos / Ajustes</td><td class="px-4 py-2.5 text-slate-600">Las vistas: visión global, trabajo por candidato, archivo de documentos y (solo admin) registros base.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">Distintivo "en riesgo"</td><td class="px-4 py-2.5 text-slate-600">Cuenta los expedientes detenidos más de lo previsto. Haz clic para abrir la lista en riesgo. Verde = sin riesgo.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">Cambio de tema</td><td class="px-4 py-2.5 text-slate-600">Alterna entre modo claro y oscuro.</td></tr>
             <tr><td class="px-4 py-2.5 font-medium text-slate-700">IT · EN · ES</td><td class="px-4 py-2.5 text-slate-600">Cambia el idioma de la interfaz.</td></tr>
@@ -1850,9 +2044,9 @@
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Panel Analítico</h2>
         <p class="text-sm leading-relaxed text-slate-600">La primera pantalla: para entender la carga de trabajo general <b>en segundos</b>.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Indicadores clave (KPI)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Expedientes Activos, Documentos Faltantes, En espera OPI, Onboarding Completado.</p>
-        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Semáforos de riesgo</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Lista los expedientes detenidos <b>demasiado tiempo</b> en su estado actual. <b>Acción:</b> haz clic en una fila para abrir el expediente e intervenir.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Expedientes Activos, Documentos Faltantes, En espera OPI, Docs por Vencer (clicable), Onboarding Completado.</p>
+        <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Semáforos de riesgo y vencimientos</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Lista los expedientes detenidos <b>demasiado tiempo</b> en su estado actual, y un panel de <b>documentos por vencer/vencidos</b>. <b>Acción:</b> haz clic en una fila para abrir el expediente; el KPI "Docs por Vencer" abre el archivo filtrado.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Candidatos por estructura</h3>
         <p class="text-sm leading-relaxed text-slate-600">Muestra cuántos candidatos están asignados a cada empleador y cuántos han completado el onboarding, además de la distribución en los 11 estados.</p>
       </section>
@@ -1955,6 +2149,19 @@
             <li><b>Registra la llamada</b> y actualiza documentos/checklist: el contador de días se reinicia.</li>
           </ol>
         </div>
+
+        <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4">
+          <p class="text-sm font-bold text-emerald-800">Otras funciones útiles</p>
+          <ul class="prose-list mt-1 ml-5 list-disc text-sm text-emerald-900/80">
+            <li><b>Subir un archivo:</b> en la tabla de documentos pulsa <b>Subir</b> → se abre el selector de archivos del ordenador (PDF, foto, escaneo). El archivo queda adjunto y el botón pasa a <b>Reemplazar</b>.</li>
+            <li><b>Archivo de Documentos</b> (pestaña <b>Documentos</b>): encuentra <b>todos</b> los documentos de todos los candidatos, con búsqueda y filtros. Pulsa <b>Ver</b> para la <b>vista previa</b> de imágenes y PDF dentro de la app.</li>
+            <li><b>Vencimientos:</b> los documentos con fecha de validez se marcan como <span class="font-semibold text-amber-600">Por vencer</span> (dentro de 60 días) o <span class="font-semibold text-rose-600">Vencido</span>. Usa el filtro <b>Por vencer</b> en el archivo.</li>
+            <li><b>Editar datos:</b> el botón <b>Editar datos</b> en la cabecera del candidato para corregir la información.</li>
+            <li><b>Logística &amp; Onboarding:</b> el botón <b>Editar</b> para introducir vuelo, alojamiento, tutor y estado del contrato.</li>
+            <li><b>Eliminar candidato</b> (solo admin): dentro de <b>Editar datos</b>, abajo a la izquierda. No se puede deshacer.</li>
+            <li><b>Exportar CSV</b> (solo admin): botón arriba a la derecha en el Panel, descarga la lista de candidatos (para informes y copias de seguridad).</li>
+          </ul>
+        </div>
       </section>
 
       <section id="dati" class="space-y-4">
@@ -2011,7 +2218,10 @@
     }
     // Settings is admin-only; non-admins are redirected to the dashboard.
     if (state.view === 'settings' && !isAdmin()) state.view = 'dashboard';
-    const body = state.view === 'dashboard' ? dashboardView() : (state.view === 'settings' ? settingsView() : casesView());
+    const body = state.view === 'dashboard' ? dashboardView()
+      : state.view === 'settings' ? settingsView()
+      : state.view === 'documents' ? archiveView()
+      : casesView();
     root.innerHTML = demoBanner() + header() + body;
     lucide.createIcons();
     maybeAutoStartTour();
@@ -2047,6 +2257,7 @@
         '<nav data-tour="views" class="ml-4 flex items-center gap-1 rounded-2xl bg-slate-100 p-1">' +
           tab('dashboard', t('nav_dashboard'), 'layout-dashboard') +
           tab('cases', t('nav_cases'), 'folder-kanban') +
+          tab('documents', t('nav_docs'), 'folder-archive') +
           (isAdmin() ? tab('settings', t('settings'), 'settings') : '') +
         '</nav>' +
         '<div class="ml-auto flex items-center gap-2.5">' +
@@ -2087,14 +2298,16 @@
   }
 
   // ------------------------------------------------------------------ DASHBOARD
-  function kpiCard(icon, label, value, tone, sub) {
+  function kpiCard(icon, label, value, tone, sub, action) {
     const tones = {
       indigo: 'from-indigo-500 to-indigo-600 shadow-indigo-200',
       rose: 'from-rose-500 to-rose-600 shadow-rose-200',
       amber: 'from-amber-500 to-amber-600 shadow-amber-200',
       emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-200',
     };
-    return '<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">' +
+    const tag = action ? 'button' : 'div';
+    const attrs = action ? ' data-action="' + action + '" class="w-full text-left ' : ' class="';
+    return '<' + tag + attrs + 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md' + (action ? ' hover:border-indigo-200' : '') + '">' +
       '<div class="flex items-start justify-between">' +
         '<div>' +
           '<p class="text-xs font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
@@ -2103,7 +2316,7 @@
         '</div>' +
         '<div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ' + tones[tone] + ' text-white shadow-lg"><i data-lucide="' + icon + '" class="h-5 w-5"></i></div>' +
       '</div>' +
-    '</div>';
+    '</' + tag + '>';
   }
 
   function dashboardView() {
@@ -2111,6 +2324,21 @@
     const risks = state.nurses.filter(isAtRisk);
     const breakdown = employerBreakdown();
     const maxTotal = Math.max(1, ...breakdown.map((b) => b.total));
+    const expiring = computeExpiring();
+
+    const expiringPanel = expiring.length === 0
+      ? '<div class="flex items-center gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700 ring-1 ring-inset ring-emerald-200 sm:col-span-2"><i data-lucide="shield-check" class="h-5 w-5"></i>' + t('exp_panel_none') + '</div>'
+      : expiring.slice(0, 8).map((it) => {
+          const badge = it.ex === 'expired'
+            ? '<span class="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-inset ring-rose-200">' + t('exp_expired') + '</span>'
+            : '<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">' + t('exp_soon') + '</span>';
+          return '<button data-action="open-nurse" data-id="' + it.n.id + '" class="flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-left transition hover:bg-slate-50">' +
+            '<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ' + (it.ex === 'expired' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600') + '"><i data-lucide="calendar-clock" class="h-4 w-4"></i></span>' +
+            '<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-slate-800">' + escapeHtml(it.d.name) + '</p>' +
+              '<p class="truncate text-xs text-slate-500">' + escapeHtml(it.n.name) + ' • ' + t('valid_until', { d: formatDate(it.d.validity) }) + '</p></div>' +
+            badge +
+          '</button>';
+        }).join('') + (expiring.length > 8 ? '<button data-action="show-expiring" class="mt-1 w-full rounded-xl py-2 text-center text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50">' + t('exp_see_all') + ' (' + expiring.length + ')</button>' : '');
 
     const riskPanel = risks.length === 0
       ? '<div class="flex items-center gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700 ring-1 ring-inset ring-emerald-200"><i data-lucide="party-popper" class="h-5 w-5"></i>' + t('risk_none') + '</div>'
@@ -2154,15 +2382,17 @@
     }).join('');
 
     return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
-      '<div class="mb-6 flex items-end justify-between">' +
+      '<div class="mb-6 flex items-end justify-between gap-3">' +
         '<div><h2 class="text-xl font-extrabold text-slate-900">' + t('dash_title') + '</h2>' +
         '<p class="text-sm text-slate-500">' + t('dash_subtitle') + '</p></div>' +
+        (isAdmin() ? '<button data-action="export-csv" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 shadow-sm transition hover:bg-slate-50"><i data-lucide="download" class="h-3.5 w-3.5"></i>' + t('export_csv') + '</button>' : '') +
       '</div>' +
 
-      '<div data-tour="kpi" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">' +
+      '<div data-tour="kpi" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">' +
         kpiCard('users-round', t('kpi_active'), k.active, 'indigo', t('kpi_active_sub')) +
         kpiCard('file-warning', t('kpi_missing'), k.missing, 'rose', t('kpi_missing_sub')) +
         kpiCard('clipboard-check', t('kpi_opi'), k.opi, 'amber', t('kpi_opi_sub')) +
+        kpiCard('calendar-clock', t('kpi_expiring'), k.expiring, k.expiring ? 'rose' : 'emerald', t('kpi_expiring_sub'), 'show-expiring') +
         kpiCard('badge-check', t('kpi_done'), k.completed, 'emerald', t('kpi_done_sub')) +
       '</div>' +
 
@@ -2184,6 +2414,16 @@
           '<div class="space-y-4">' + breakdownRows + '</div>' +
         '</section>' +
       '</div>' +
+
+      '<section class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+        '<div class="mb-4 flex items-center gap-2">' +
+          '<i data-lucide="calendar-clock" class="h-5 w-5 text-amber-500"></i>' +
+          '<h3 class="text-sm font-bold text-slate-900">' + t('exp_panel_title') + '</h3>' +
+          (expiring.length ? '<span class="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">' + expiring.length + '</span>' : '') +
+          '<span class="ml-auto text-xs text-slate-400">' + t('kpi_expiring_sub') + '</span>' +
+        '</div>' +
+        '<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">' + expiringPanel + '</div>' +
+      '</section>' +
 
       '<section class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
         '<div class="mb-4 flex items-center gap-2">' +
@@ -2404,7 +2644,7 @@
             '</div>';
       const fileLine = d.fileName
         ? '<p class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><i data-lucide="paperclip" class="h-3 w-3"></i>' +
-            (d.fileUrl ? '<a href="' + escapeHtml(d.fileUrl) + '" target="_blank" rel="noopener" class="font-medium text-indigo-500 underline-offset-2 hover:underline">' + escapeHtml(d.fileName) + '</a>' : escapeHtml(d.fileName)) +
+            (d.fileUrl ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="font-medium text-indigo-500 underline-offset-2 hover:underline">' + escapeHtml(d.fileName) + '</button>' : escapeHtml(d.fileName)) +
             (d.fileTooBig ? ' <span class="text-amber-500">(' + escapeHtml(t('file_too_big')) + ')</span>' : '') + '</p>'
         : '';
       return '<tr class="border-b border-slate-100 last:border-0">' +
@@ -2806,6 +3046,11 @@
       case 'open-edit-nurse': openNewNurseModal(t.getAttribute('data-id')); break;
       case 'open-relocation': openRelocationModal(t.getAttribute('data-id')); break;
       case 'save-relocation': saveRelocation(); break;
+      case 'view-doc': openDocPreview(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'doc-filter': state.docFilter = t.getAttribute('data-filter'); saveState(); render(); break;
+      case 'delete-nurse': deleteNurse(t.getAttribute('data-id')); break;
+      case 'export-csv': exportCandidatesCsv(); break;
+      case 'show-expiring': state.view = 'documents'; state.docFilter = 'expiring'; commit(); break;
       case 'reset': resetData(); break;
       case 'start-tour': startTour(); break;
       case 'tour-next': tourNext(); break;
@@ -2858,6 +3103,18 @@
         host.innerHTML = casesBody();
         lucide.createIcons();
         const fresh = document.getElementById('search-input');
+        if (fresh) { fresh.focus(); try { fresh.setSelectionRange(caret, caret); } catch (_) {} }
+      }
+      return;
+    }
+    const ds = e.target.closest('[data-action="doc-search"]');
+    if (ds) { state.docSearch = ds.value; saveState();
+      const host = document.getElementById('archive-host');
+      if (host) {
+        const caret = ds.selectionStart;
+        host.innerHTML = archiveBody();
+        lucide.createIcons();
+        const fresh = document.getElementById('doc-search-input');
         if (fresh) { fresh.focus(); try { fresh.setSelectionRange(caret, caret); } catch (_) {} }
       }
     }
