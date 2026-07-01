@@ -81,6 +81,8 @@
       #hdr-tools-btn { display: none !important; }
     }
     .dark #hdr-tools.open { background: #1e293b; border-color: #334155; }
+    /* "Riepilogo Trasferimenti": softer, less flashy panel in dark mode (no indigo gradient) */
+    .dark .dhl-summary { background-image: none !important; background-color: #131c30 !important; border-color: #2b3a52 !important; }
     /* Interactive guided tour */
     #tour-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
     #tour-hole {
@@ -300,11 +302,11 @@
       dash_title:'Dashboard Analitica', dash_subtitle:'Visione globale del pipeline di trasferimento.',
       kpi_active:'Pratiche Attive', kpi_active_sub:'In lavorazione (step 1–10)', kpi_missing:'Documenti Mancanti', kpi_missing_sub:'Candidati con doc. da caricare',
       kpi_opi:'In attesa OPI', kpi_opi_sub:'Pronti / in iscrizione albo', kpi_done:'Onboarding Completati', kpi_done_sub:'Integrazione conclusa',
-      summary_title:'Riepilogo Trasferimenti', summary_hint:'Colpo d’occhio: quanti in gestione, mandati e da mandare',
+      summary_title:'Riepilogo Trasferimenti', summary_hint:'Colpo d’occhio: quanti in gestione, trasferiti e da trasferire',
       kpi_treating:'In Gestione', kpi_treating_sub:'Infermieri che stiamo seguendo (totale)',
-      kpi_sent:'Mandati in Italia', kpi_sent_sub:'Arrivati o in onboarding (step 10–11)',
-      kpi_tosend:'Ancora da Mandare', kpi_tosend_sub:'In pipeline, non ancora partiti (step 1–9)',
-      filter_sent:'Mandati in Italia', filter_tosend:'Da mandare', clear_filter:'Rimuovi filtro',
+      kpi_sent:'Trasferiti', kpi_sent_sub:'Arrivati in Italia o in onboarding (step 10–11)',
+      kpi_tosend:'Da Trasferire', kpi_tosend_sub:'In pipeline, non ancora partiti (step 1–9)',
+      filter_sent:'Trasferiti', filter_tosend:'Da Trasferire', clear_filter:'Rimuovi filtro',
       risk_title:'Semafori di Rischio', risk_hint:'Pratiche ferme oltre la soglia SLA', risk_none:'Nessuna pratica bloccata oltre i tempi previsti. Ottimo lavoro.',
       risk_stuck_in:'Bloccato in «{state}»', days_short:'gg', sla_short:'SLA {n} gg',
       struct_title:'Candidati per Struttura', onboard_abbr:'onboard.', candidate_one:'candidato', candidate_many:'candidati', pipeline_title:'Distribuzione nel Workflow (11 stati)',
@@ -369,11 +371,11 @@
       dash_title:'Analytics Dashboard', dash_subtitle:'Global view of the transfer pipeline.',
       kpi_active:'Active Cases', kpi_active_sub:'In progress (steps 1–10)', kpi_missing:'Missing Documents', kpi_missing_sub:'Candidates with docs to upload',
       kpi_opi:'Awaiting OPI', kpi_opi_sub:'Ready / registering', kpi_done:'Onboarding Completed', kpi_done_sub:'Integration completed',
-      summary_title:'Transfer Summary', summary_hint:'At a glance: how many in progress, sent and still to send',
+      summary_title:'Transfer Summary', summary_hint:'At a glance: how many under management, transferred and to transfer',
       kpi_treating:'Under Management', kpi_treating_sub:'Nurses we are handling (total)',
-      kpi_sent:'Sent to Italy', kpi_sent_sub:'Arrived or onboarding (steps 10–11)',
-      kpi_tosend:'Still to Send', kpi_tosend_sub:'In pipeline, not yet departed (steps 1–9)',
-      filter_sent:'Sent to Italy', filter_tosend:'To send', clear_filter:'Clear filter',
+      kpi_sent:'Transferred', kpi_sent_sub:'Arrived in Italy or onboarding (steps 10–11)',
+      kpi_tosend:'To Transfer', kpi_tosend_sub:'In pipeline, not yet departed (steps 1–9)',
+      filter_sent:'Transferred', filter_tosend:'To transfer', clear_filter:'Clear filter',
       risk_title:'Risk Alerts', risk_hint:'Cases stuck beyond the SLA threshold', risk_none:'No cases stuck beyond expected times. Great job.',
       risk_stuck_in:'Stuck in “{state}”', days_short:'d', sla_short:'SLA {n}d',
       struct_title:'Candidates per Facility', onboard_abbr:'onboard.', candidate_one:'candidate', candidate_many:'candidates', pipeline_title:'Workflow Distribution (11 states)',
@@ -437,11 +439,11 @@
       dash_title:'Panel Analítico', dash_subtitle:'Visión global del proceso de traslado.',
       kpi_active:'Expedientes Activos', kpi_active_sub:'En curso (pasos 1–10)', kpi_missing:'Documentos Faltantes', kpi_missing_sub:'Candidatos con docs por subir',
       kpi_opi:'En espera OPI', kpi_opi_sub:'Listos / en inscripción', kpi_done:'Onboarding Completado', kpi_done_sub:'Integración concluida',
-      summary_title:'Resumen de Traslados', summary_hint:'De un vistazo: cuántos en gestión, enviados y por enviar',
+      summary_title:'Resumen de Traslados', summary_hint:'De un vistazo: cuántos en gestión, trasladados y por trasladar',
       kpi_treating:'En Gestión', kpi_treating_sub:'Enfermeros que seguimos (total)',
-      kpi_sent:'Enviados a Italia', kpi_sent_sub:'Llegados o en onboarding (pasos 10–11)',
-      kpi_tosend:'Aún por Enviar', kpi_tosend_sub:'En pipeline, aún no partidos (pasos 1–9)',
-      filter_sent:'Enviados a Italia', filter_tosend:'Por enviar', clear_filter:'Quitar filtro',
+      kpi_sent:'Trasladados', kpi_sent_sub:'Llegados a Italia o en onboarding (pasos 10–11)',
+      kpi_tosend:'Por Trasladar', kpi_tosend_sub:'En pipeline, aún no partidos (pasos 1–9)',
+      filter_sent:'Trasladados', filter_tosend:'Por trasladar', clear_filter:'Quitar filtro',
       risk_title:'Semáforos de Riesgo', risk_hint:'Expedientes detenidos más allá del SLA', risk_none:'Ningún expediente detenido más de lo previsto. ¡Buen trabajo!',
       risk_stuck_in:'Detenido en «{state}»', days_short:'d', sla_short:'SLA {n}d',
       struct_title:'Candidatos por Estructura', onboard_abbr:'onboard.', candidate_one:'candidato', candidate_many:'candidatos', pipeline_title:'Distribución en el Flujo (11 estados)',
@@ -1648,13 +1650,13 @@
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Dashboard Analitica</h2>
         <p class="text-sm leading-relaxed text-slate-600">La prima schermata: per capire <b>in pochi secondi</b> lo stato generale del lavoro.</p>
         <h3 id="riepilogo" class="pt-2 text-base font-bold text-slate-800">4.1 · Riepilogo Trasferimenti</h3>
-        <p class="text-sm leading-relaxed text-slate-600">In cima alla dashboard trovi il colpo d'occhio richiesto più spesso: <b>quanti infermieri stiamo trattando</b>, quanti sono <b>stati mandati in Italia</b> e quanti <b>devono ancora andare</b>. Vale sempre la relazione: <b>In Gestione = Mandati in Italia + Ancora da Mandare</b>.</p>
+        <p class="text-sm leading-relaxed text-slate-600">In cima alla dashboard trovi il colpo d'occhio richiesto più spesso: <b>quanti infermieri stiamo trattando</b>, quanti sono stati <b>trasferiti in Italia</b> e quanti <b>devono ancora essere trasferiti</b>. Vale sempre la relazione: <b>In Gestione = Trasferiti + Da Trasferire</b>.</p>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">In Gestione</p><p class="mt-1 text-xs text-slate-500">Totale infermieri che stiamo seguendo (tutte le pratiche presenti).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Mandati in Italia</p><p class="mt-1 text-xs text-slate-500">Chi è già partito: <b>Arrivo in Italia</b> (stato 10) oppure <b>Onboarding completato</b> (stato 11).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Ancora da Mandare</p><p class="mt-1 text-xs text-slate-500">Ancora nel percorso, non ancora partiti (stati 1–9).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Trasferiti</p><p class="mt-1 text-xs text-slate-500">Chi è già partito: <b>Arrivo in Italia</b> (stato 10) oppure <b>Onboarding completato</b> (stato 11).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Da Trasferire</p><p class="mt-1 text-xs text-slate-500">Ancora nel percorso, non ancora partiti (stati 1–9).</p></div>
         </div>
-        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Suggerimento.</b> Ogni riquadro è <b>cliccabile</b>: ti porta direttamente in <b>Gestione Pratiche</b> già filtrato (es. "Mandati in Italia" mostra solo chi è partito).</div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Suggerimento.</b> Ogni riquadro è <b>cliccabile</b>: ti porta direttamente in <b>Gestione Pratiche</b> già filtrato (es. "Trasferiti" mostra solo chi è partito).</div>
         <h3 id="kpi" class="pt-2 text-base font-bold text-slate-800">4.2 · Indicatori chiave (KPI)</h3>
         <p class="text-sm leading-relaxed text-slate-600"><b>Tutti i KPI sono cliccabili</b> e aprono la sezione corrispondente già filtrata.</p>
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1676,7 +1678,7 @@
         <h3 class="pt-2 text-base font-bold text-slate-800">5.1 · Elenco e ricerca</h3>
         <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
           <li><b>Ricerca:</b> per nome, passaporto o struttura di destinazione.</li>
-          <li><b>Filtri di stato:</b> Tutti, <b>Mandati in Italia</b>, <b>Da mandare</b>, A rischio, Doc. Mancanti, In corso, Visto, Completati. Arrivando da un KPI (es. "In attesa OPI") compare un filtro temporaneo evidenziato, con la ✕ per rimuoverlo.</li>
+          <li><b>Filtri di stato:</b> Tutti, <b>Trasferiti</b>, <b>Da Trasferire</b>, A rischio, Doc. Mancanti, In corso, Visto, Completati. Arrivando da un KPI (es. "In attesa OPI") compare un filtro temporaneo evidenziato, con la ✕ per rimuoverlo.</li>
           <li><b>Scheda:</b> mostra badge di stato, livello linguistico e step. L'icona ⏰ segnala un rischio ritardo.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.2 · Lo stepper (timeline 11 stati)</h3>
@@ -1881,13 +1883,13 @@
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Analytics Dashboard</h2>
         <p class="text-sm leading-relaxed text-slate-600">The first screen: to understand the overall workload <b>in seconds</b>.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Transfer Summary</h3>
-        <p class="text-sm leading-relaxed text-slate-600">At the top you get the most-asked figures at a glance: <b>how many nurses we are handling</b>, how many have been <b>sent to Italy</b>, and how many <b>still have to go</b>. The relationship always holds: <b>Under Management = Sent to Italy + Still to Send</b>.</p>
+        <p class="text-sm leading-relaxed text-slate-600">At the top you get the most-asked figures at a glance: <b>how many nurses we are handling</b>, how many have been <b>transferred to Italy</b>, and how many <b>still have to be transferred</b>. The relationship always holds: <b>Under Management = Transferred + To Transfer</b>.</p>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Under Management</p><p class="mt-1 text-xs text-slate-500">Total nurses we are handling (all existing cases).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Sent to Italy</p><p class="mt-1 text-xs text-slate-500">Already departed: <b>Arrival in Italy</b> (state 10) or <b>Onboarding completed</b> (state 11).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Still to Send</p><p class="mt-1 text-xs text-slate-500">Still in the pipeline, not yet departed (states 1–9).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Transferred</p><p class="mt-1 text-xs text-slate-500">Already departed: <b>Arrival in Italy</b> (state 10) or <b>Onboarding completed</b> (state 11).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">To Transfer</p><p class="mt-1 text-xs text-slate-500">Still in the pipeline, not yet departed (states 1–9).</p></div>
         </div>
-        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Tip.</b> Each tile is <b>clickable</b>: it opens <b>Case Management</b> already filtered (e.g. "Sent to Italy" shows only those who departed).</div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Tip.</b> Each tile is <b>clickable</b>: it opens <b>Case Management</b> already filtered (e.g. "Transferred" shows only those who departed).</div>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Key indicators (KPI)</h3>
         <p class="text-sm leading-relaxed text-slate-600"><b>All KPIs are clickable</b> and open the matching section already filtered: Active Cases, Missing Documents, Awaiting OPI, Expiring Docs, Onboarding Completed.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Risk alerts &amp; expiries</h3>
@@ -1902,7 +1904,7 @@
         <h3 class="pt-2 text-base font-bold text-slate-800">5.1 · List and search</h3>
         <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
           <li><b>Search:</b> by name, passport or destination facility.</li>
-          <li><b>Status filters:</b> All, <b>Sent to Italy</b>, <b>To send</b>, At risk, Missing Docs, In progress, Visa, Completed. Coming from a KPI (e.g. "Awaiting OPI") a temporary highlighted filter appears, with an ✕ to clear it.</li>
+          <li><b>Status filters:</b> All, <b>Transferred</b>, <b>To transfer</b>, At risk, Missing Docs, In progress, Visa, Completed. Coming from a KPI (e.g. "Awaiting OPI") a temporary highlighted filter appears, with an ✕ to clear it.</li>
           <li><b>Card:</b> shows the status badge, language level and step. The ⏰ icon flags a delay risk.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.2 · The stepper (11-state timeline)</h3>
@@ -2106,13 +2108,13 @@
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i>4. Panel Analítico</h2>
         <p class="text-sm leading-relaxed text-slate-600">La primera pantalla: para entender la carga de trabajo general <b>en segundos</b>.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.1 · Resumen de Traslados</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Arriba tienes de un vistazo las cifras más consultadas: <b>cuántos enfermeros estamos gestionando</b>, cuántos han sido <b>enviados a Italia</b> y cuántos <b>aún deben ir</b>. Siempre se cumple: <b>En Gestión = Enviados a Italia + Aún por Enviar</b>.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Arriba tienes de un vistazo las cifras más consultadas: <b>cuántos enfermeros estamos gestionando</b>, cuántos han sido <b>trasladados a Italia</b> y cuántos <b>aún deben trasladarse</b>. Siempre se cumple: <b>En Gestión = Trasladados + Por Trasladar</b>.</p>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">En Gestión</p><p class="mt-1 text-xs text-slate-500">Total de enfermeros que seguimos (todos los expedientes).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Enviados a Italia</p><p class="mt-1 text-xs text-slate-500">Ya partieron: <b>Llegada a Italia</b> (estado 10) u <b>Onboarding completado</b> (estado 11).</p></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Aún por Enviar</p><p class="mt-1 text-xs text-slate-500">Todavía en el proceso, aún no partidos (estados 1–9).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Trasladados</p><p class="mt-1 text-xs text-slate-500">Ya partieron: <b>Llegada a Italia</b> (estado 10) u <b>Onboarding completado</b> (estado 11).</p></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-sm font-bold text-slate-800">Por Trasladar</p><p class="mt-1 text-xs text-slate-500">Todavía en el proceso, aún no partidos (estados 1–9).</p></div>
         </div>
-        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Consejo.</b> Cada recuadro es <b>clicable</b>: abre <b>Gestión de Expedientes</b> ya filtrado (p. ej. "Enviados a Italia" muestra solo quienes partieron).</div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Consejo.</b> Cada recuadro es <b>clicable</b>: abre <b>Gestión de Expedientes</b> ya filtrado (p. ej. "Trasladados" muestra solo quienes partieron).</div>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.2 · Indicadores clave (KPI)</h3>
         <p class="text-sm leading-relaxed text-slate-600"><b>Todos los KPI son clicables</b> y abren la sección correspondiente ya filtrada: Expedientes Activos, Documentos Faltantes, En espera OPI, Docs por Vencer, Onboarding Completado.</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">4.3 · Semáforos de riesgo y vencimientos</h3>
@@ -2127,7 +2129,7 @@
         <h3 class="pt-2 text-base font-bold text-slate-800">5.1 · Lista y búsqueda</h3>
         <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
           <li><b>Búsqueda:</b> por nombre, pasaporte o estructura de destino.</li>
-          <li><b>Filtros de estado:</b> Todos, <b>Enviados a Italia</b>, <b>Por enviar</b>, En riesgo, Docs Faltantes, En curso, Visado, Completados. Al venir de un KPI (p. ej. "En espera OPI") aparece un filtro temporal resaltado, con la ✕ para quitarlo.</li>
+          <li><b>Filtros de estado:</b> Todos, <b>Trasladados</b>, <b>Por Trasladar</b>, En riesgo, Docs Faltantes, En curso, Visado, Completados. Al venir de un KPI (p. ej. "En espera OPI") aparece un filtro temporal resaltado, con la ✕ para quitarlo.</li>
           <li><b>Ficha:</b> muestra el estado, el nivel lingüístico y el paso. El icono ⏰ señala riesgo de retraso.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.2 · El stepper (línea de 11 estados)</h3>
@@ -2294,8 +2296,31 @@
       : casesView();
     root.innerHTML = demoBanner() + header() + body;
     lucide.createIcons();
+    syncHistory();
     maybeAutoStartTour();
   }
+
+  // ---------- Browser history: back/forward navigates between the main sections ----------
+  const APP_VIEWS = ['dashboard', 'cases', 'documents', 'settings'];
+  let _lastHistoryView = null;
+  function syncHistory() {
+    const v = state.view;
+    if (v === _lastHistoryView) return;
+    const entry = { dhlView: v };
+    if (_lastHistoryView === null) history.replaceState(entry, '', '#' + v);
+    else history.pushState(entry, '', '#' + v);
+    _lastHistoryView = v;
+  }
+  window.addEventListener('popstate', (e) => {
+    let v = (e.state && e.state.dhlView) || (location.hash || '').replace('#', '') || 'dashboard';
+    if (APP_VIEWS.indexOf(v) < 0) v = 'dashboard';
+    if (v === state.view) return;
+    state.view = v;
+    _lastHistoryView = v; // the URL already reflects this entry — don't push a new one
+    saveState();
+    render();
+  });
+
   // Lightweight re-render of just the cases body (used for search typing to keep focus elsewhere)
   function renderCasesOnly() {
     if (state.view !== 'cases') return;
@@ -2476,7 +2501,7 @@
         (isAdmin() ? '<button data-action="export-csv" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 shadow-sm transition hover:bg-slate-50"><i data-lucide="download" class="h-3.5 w-3.5"></i>' + t('export_csv') + '</button>' : '') +
       '</div>' +
 
-      '<section data-tour="summary" class="mb-6 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm">' +
+      '<section data-tour="summary" class="dhl-summary mb-6 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm">' +
         '<div class="mb-4 flex items-center gap-2">' +
           '<i data-lucide="plane-takeoff" class="h-5 w-5 text-indigo-500"></i>' +
           '<h3 class="text-sm font-bold text-slate-900">' + t('summary_title') + '</h3>' +
@@ -3273,15 +3298,21 @@
   // ---------- Boot ----------
   loadLang();
   loadTheme();
+  function applyInitialHashView() {
+    const h = (location.hash || '').replace('#', '');
+    if (APP_VIEWS.indexOf(h) >= 0) state.view = h;
+  }
   if (initFirebase()) {
     // Firebase configured: onAuthStateChanged drives rendering (login screen → app).
     // Seed a baseline state so the first render before auth resolves never crashes.
     state = loadState();
+    applyInitialHashView();
     state.nurses.forEach((n) => { n.status = deriveStatus(n); });
     render(); // shows login screen (no currentUser yet)
   } else {
     // Local demo mode: no auth, localStorage only.
     state = loadState();
+    applyInitialHashView();
     state.nurses.forEach((n) => { n.status = deriveStatus(n); });
     render();
   }
