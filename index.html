@@ -55,9 +55,14 @@
       content: attr(data-tooltip);
       position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
       background: #0f172a; color: #fff; padding: 6px 10px; border-radius: 8px;
-      font-size: 11px; font-weight: 500; white-space: nowrap; z-index: 50; pointer-events: none;
+      font-size: 11px; font-weight: 500; z-index: 50; pointer-events: none;
       box-shadow: 0 8px 24px rgba(15,23,42,.25);
+      width: max-content; max-width: min(72vw, 260px); white-space: normal; overflow-wrap: anywhere; text-align: center;
     }
+    /* Drop the tooltip below the element (used in the top header so it isn't clipped by the browser bar) */
+    [data-tooltip][data-tip-pos="bottom"]:hover::after { top: calc(100% + 8px); bottom: auto; }
+    /* Below + right-aligned: for elements near the right edge (avatar) so it never overflows the viewport */
+    [data-tooltip][data-tip-pos="bottom-left"]:hover::after { top: calc(100% + 8px); bottom: auto; left: auto; right: 0; transform: none; text-align: left; }
     /* Interactive guided tour */
     #tour-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
     #tour-hole {
@@ -1192,7 +1197,7 @@
       ((state.docFilter || 'all') === val ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200') + '">' + label + '</button>';
     const rows = list.length === 0
       ? '<div class="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-400">' + t('archive_empty') + '</div>'
-      : '<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table class="w-full text-sm">' +
+      : '<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table class="w-full min-w-[720px] text-sm">' +
           '<thead><tr class="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">' +
             '<th class="px-4 py-2.5">' + t('col_candidate') + '</th><th class="px-2 py-2.5">' + t('th_document') + '</th><th class="px-2 py-2.5">' + t('th_lang') + '</th><th class="px-2 py-2.5">' + t('th_uploaded') + '</th><th class="px-2 py-2.5">' + t('th_status') + '</th><th class="px-4 py-2.5 text-right">' + t('th_actions') + '</th>' +
           '</tr></thead><tbody>' +
@@ -1226,7 +1231,7 @@
       '</div>' + rows;
   }
   function archiveView() {
-    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-4 py-6 sm:px-5">' +
       '<div class="mb-6"><h2 class="text-xl font-extrabold text-slate-900">' + t('archive_title') + '</h2>' +
       '<p class="text-sm text-slate-500">' + t('archive_sub') + '</p></div>' +
       '<div id="archive-host">' + archiveBody() + '</div>' +
@@ -1334,7 +1339,7 @@
     '</section>';
   }
   function settingsView() {
-    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-4 py-6 sm:px-5">' +
       '<div class="mb-6"><h2 class="text-xl font-extrabold text-slate-900">' + t('settings_title') + '</h2>' +
       '<p class="text-sm text-slate-500">' + t('settings_subtitle') + '</p></div>' +
       '<div class="grid grid-cols-1 gap-5 lg:grid-cols-3">' +
@@ -1437,7 +1442,7 @@
         avatar +
         '<div id="pf-msg" class="hidden"></div>' +
         '<div>' + inputField('pf-name', t('prof_name'), 'Giulia Ferraro') + '</div>' +
-        '<div class="grid grid-cols-2 gap-2.5">' +
+        '<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">' +
           infoRow(t('prof_method'), providerLabel()) +
           infoRow(t('prof_uid'), currentUser.uid ? currentUser.uid.slice(0, 10) + '…' : '—') +
           infoRow(t('prof_created'), fmtMeta(currentUser.metadata && currentUser.metadata.creationTime)) +
@@ -1527,7 +1532,7 @@
     const toc = tocItems.map((item) => '<a href="#' + item[0] + '" class="toc-link block rounded-lg px-3 py-1.5 text-slate-600 transition hover:bg-slate-50">' + item[1] + '</a>').join('');
     return '' +
     '<div class="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">' +
-      '<div class="mx-auto flex max-w-6xl items-center gap-3 px-5 py-3">' +
+      '<div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-5">' +
         '<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow"><i data-lucide="book-open" class="h-4 w-4"></i></div>' +
         '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('manual_title') + '</h1><p class="text-xs text-slate-500">DominicaHealthLink · v1.0</p></div>' +
         '<div class="ml-auto flex items-center gap-2">' +
@@ -1536,7 +1541,7 @@
         '</div>' +
       '</div>' +
     '</div>' +
-    '<div class="mx-auto flex max-w-6xl gap-8 px-5 py-8">' +
+    '<div class="mx-auto flex max-w-6xl gap-8 px-4 py-8 sm:px-5">' +
       '<aside class="no-print hidden w-60 shrink-0 lg:block"><nav class="sticky top-24 space-y-0.5 text-sm"><p class="mb-2 px-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">' + t('manual_index') + '</p>' + toc + '</nav></aside>' +
       '<main class="min-w-0 flex-1 space-y-12">' + manualBody() + '</main>' +
     '</div>';
@@ -2237,7 +2242,7 @@
 
   function header() {
     const tab = (id, label, icon) =>
-      '<button data-action="set-view" data-view="' + id + '" class="group inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ' +
+      '<button data-action="set-view" data-view="' + id + '" class="group inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ' +
       (state.view === id ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800') + '">' +
       '<i data-lucide="' + icon + '" class="h-4 w-4"></i>' + label + '</button>';
 
@@ -2245,30 +2250,30 @@
 
     return '' +
     '<header class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">' +
-      '<div class="mx-auto flex max-w-[1400px] items-center gap-4 px-5 py-3">' +
-        '<div class="flex items-center gap-3">' +
-          '<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
+      '<div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:px-5 lg:flex-nowrap">' +
+        '<div class="flex min-w-0 items-center gap-3">' +
+          '<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
             '<i data-lucide="heart-pulse" class="h-5 w-5"></i></div>' +
-          '<div>' +
-            '<h1 class="text-base font-extrabold leading-tight text-slate-900">DominicaHealthLink</h1>' +
-            '<p class="text-xs text-slate-500">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
+          '<div class="min-w-0">' +
+            '<h1 class="truncate text-base font-extrabold leading-tight text-slate-900">DominicaHealthLink</h1>' +
+            '<p class="hidden truncate text-xs text-slate-500 sm:block">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
           '</div>' +
         '</div>' +
-        '<nav data-tour="views" class="ml-4 flex items-center gap-1 rounded-2xl bg-slate-100 p-1">' +
+        '<nav data-tour="views" class="order-last flex w-full items-center gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 lg:order-none lg:ml-2 lg:w-auto lg:overflow-visible">' +
           tab('dashboard', t('nav_dashboard'), 'layout-dashboard') +
           tab('cases', t('nav_cases'), 'folder-kanban') +
           tab('documents', t('nav_docs'), 'folder-archive') +
           (isAdmin() ? tab('settings', t('settings'), 'settings') : '') +
         '</nav>' +
-        '<div class="ml-auto flex items-center gap-2.5">' +
+        '<div class="ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">' +
           (riskCount > 0
             ? '<button data-action="show-risk" class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-100"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + t('at_risk', { n: riskCount }) + '</button>'
             : '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>' + t('no_risk') + '</span>') +
-          '<button data-action="toggle-theme" class="inline-flex items-center justify-center rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('theme_toggle')) + '"><i data-lucide="' + (THEME === 'dark' ? 'sun' : 'moon') + '" class="h-3.5 w-3.5"></i></button>' +
+          '<button data-action="toggle-theme" class="inline-flex items-center justify-center rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('theme_toggle')) + '"><i data-lucide="' + (THEME === 'dark' ? 'sun' : 'moon') + '" class="h-3.5 w-3.5"></i></button>' +
           langSwitcher(false) +
           '<button data-action="open-manual" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="book-open" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('manual') + '</span></button>' +
           '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('guide') + '</span></button>' +
-          (isAdmin() ? '<button data-action="reset" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i></button>' : '') +
+          (isAdmin() ? '<button data-action="reset" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i></button>' : '') +
           userCluster() +
         '</div>' +
       '</div>' +
@@ -2280,17 +2285,17 @@
       const label = currentUser.displayName || currentUser.email || t('user');
       const initial = (label[0] || '?').toUpperCase();
       return '<div class="flex items-center gap-2 border-l border-slate-200 pl-2.5">' +
-        '<button data-action="open-profile" class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white transition hover:ring-2 hover:ring-indigo-200" data-tooltip="' + escapeHtml(label) + ' — ' + escapeHtml(t('profile_tooltip')) + '">' + escapeHtml(initial) + '</button>' +
+        '<button data-action="open-profile" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white transition hover:ring-2 hover:ring-indigo-200" data-tip-pos="bottom-left" data-tooltip="' + escapeHtml(label) + ' — ' + escapeHtml(t('profile_tooltip')) + '">' + escapeHtml(initial) + '</button>' +
         '<button data-action="logout" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="log-out" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('logout') + '</span></button>' +
       '</div>';
     }
-    return '<button data-action="open-profile" class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-200" data-tooltip="' + escapeHtml(t('demo_local_tip')) + '"><i data-lucide="hard-drive" class="h-3.5 w-3.5"></i>' + t('demo_local') + '</button>';
+    return '<button data-action="open-profile" class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-200" data-tip-pos="bottom-left" data-tooltip="' + escapeHtml(t('demo_local_tip')) + '"><i data-lucide="hard-drive" class="h-3.5 w-3.5"></i>' + t('demo_local') + '</button>';
   }
 
   function demoBanner() {
     if (fbEnabled) return '';
     return '<div class="border-b border-amber-200 bg-amber-50">' +
-      '<div class="mx-auto flex max-w-[1400px] items-center gap-2 px-5 py-2 text-xs text-amber-700">' +
+      '<div class="mx-auto flex max-w-[1400px] items-center gap-2 px-4 py-2 text-xs text-amber-700 sm:px-5">' +
         '<i data-lucide="info" class="h-4 w-4 shrink-0"></i>' +
         '<span>' + t('demo_banner') + '</span>' +
       '</div>' +
@@ -2381,7 +2386,7 @@
       '</div>';
     }).join('');
 
-    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-4 py-6 sm:px-5">' +
       '<div class="mb-6 flex items-end justify-between gap-3">' +
         '<div><h2 class="text-xl font-extrabold text-slate-900">' + t('dash_title') + '</h2>' +
         '<p class="text-sm text-slate-500">' + t('dash_subtitle') + '</p></div>' +
@@ -2437,7 +2442,7 @@
 
   // ------------------------------------------------------------------ CASES (master-detail)
   function casesView() {
-    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-5 py-6">' +
+    return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-4 py-6 sm:px-5">' +
       '<div id="cases-host">' + casesBody() + '</div>' +
     '</main>';
   }
@@ -2507,7 +2512,7 @@
           filterChip('Visa Obtained', t('filter_visa')) +
           filterChip('Onboarding Completed', t('filter_done')) +
         '</div>' +
-        '<div class="max-h-[calc(100vh-220px)] space-y-2.5 overflow-y-auto pr-1">' + cards + '</div>' +
+        '<div class="space-y-2.5 pr-1 lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto">' + cards + '</div>' +
       '</div>' +
     '</aside>';
   }
@@ -2666,8 +2671,8 @@
         '<span class="ml-auto text-xs text-slate-400">' + t('docs_count', { a: approved, b: n.documents.length }) + '</span>' +
         '<button data-action="open-add-doc" data-nurse="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="plus" class="h-3 w-3"></i>' + t('add') + '</button>' +
       '</div>' +
-      '<div class="overflow-x-auto">' +
-        '<table class="w-full">' +
+      '<div class="-mx-5 overflow-x-auto px-5">' +
+        '<table class="w-full min-w-[560px]">' +
           '<thead><tr class="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">' +
             '<th class="pb-2 pr-2">' + t('th_document') + '</th><th class="px-2 pb-2">' + t('th_lang') + '</th><th class="px-2 pb-2">' + t('th_uploaded') + '</th><th class="px-2 pb-2">' + t('th_status') + '</th><th class="pb-2 pl-2 text-right">' + t('th_actions') + '</th>' +
           '</tr></thead>' +
