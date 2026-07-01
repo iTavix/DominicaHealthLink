@@ -2294,7 +2294,7 @@
       : state.view === 'settings' ? settingsView()
       : state.view === 'documents' ? archiveView()
       : casesView();
-    root.innerHTML = demoBanner() + header() + body;
+    root.innerHTML = demoBanner() + header() + body + appFooter();
     lucide.createIcons();
     syncHistory();
     maybeAutoStartTour();
@@ -2395,6 +2395,16 @@
         '<span>' + t('demo_banner') + '</span>' +
       '</div>' +
     '</div>';
+  }
+
+  function appFooter() {
+    return '<footer class="mx-auto mt-4 max-w-[1400px] px-4 pb-8 pt-2 sm:px-5">' +
+      '<div class="flex items-center justify-center gap-1.5 border-t border-slate-200 pt-5 text-xs text-slate-400">' +
+        '<span>Realizzato con cura da</span>' +
+        '<i data-lucide="heart" class="h-3.5 w-3.5 text-rose-400"></i>' +
+        '<span class="font-semibold text-slate-500">iTavix &amp; Claude</span>' +
+      '</div>' +
+    '</footer>';
   }
 
   // ------------------------------------------------------------------ DASHBOARD
