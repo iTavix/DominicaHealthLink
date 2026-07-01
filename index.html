@@ -2268,7 +2268,7 @@
 
     return '' +
     '<header class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">' +
-      '<div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:px-5 lg:flex-nowrap">' +
+      '<div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:px-5">' +
         '<div class="flex min-w-0 items-center gap-3">' +
           '<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
             '<i data-lucide="heart-pulse" class="h-5 w-5"></i></div>' +
@@ -2277,12 +2277,14 @@
             '<p class="hidden truncate text-xs text-slate-500 sm:block">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
           '</div>' +
         '</div>' +
-        '<nav data-tour="views" class="order-last flex w-full items-center gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 lg:order-none lg:ml-2 lg:w-auto lg:overflow-visible">' +
-          tab('dashboard', t('nav_dashboard'), 'layout-dashboard') +
-          tab('cases', t('nav_cases'), 'folder-kanban') +
-          tab('documents', t('nav_docs'), 'folder-archive') +
-          (isAdmin() ? tab('settings', t('settings'), 'settings') : '') +
-        '</nav>' +
+        '<div class="order-last w-full">' +
+          '<nav data-tour="views" class="flex w-full items-center gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 sm:w-max sm:max-w-full">' +
+            tab('dashboard', t('nav_dashboard'), 'layout-dashboard') +
+            tab('cases', t('nav_cases'), 'folder-kanban') +
+            tab('documents', t('nav_docs'), 'folder-archive') +
+            (isAdmin() ? tab('settings', t('settings'), 'settings') : '') +
+          '</nav>' +
+        '</div>' +
         '<div class="relative ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">' +
           (riskCount > 0
             ? '<button data-action="show-risk" class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-100"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + t('at_risk', { n: riskCount }) + '</button>'
