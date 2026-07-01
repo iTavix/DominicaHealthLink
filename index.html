@@ -63,6 +63,24 @@
     [data-tooltip][data-tip-pos="bottom"]:hover::after { top: calc(100% + 8px); bottom: auto; }
     /* Below + right-aligned: for elements near the right edge (avatar) so it never overflows the viewport */
     [data-tooltip][data-tip-pos="bottom-left"]:hover::after { top: calc(100% + 8px); bottom: auto; left: auto; right: 0; transform: none; text-align: left; }
+    /* Header utility controls: collapsed into a dropdown on mobile/tablet, inline on desktop (lg+) */
+    #hdr-tools { display: none; }
+    #hdr-tools.open {
+      display: flex; position: absolute; top: calc(100% + 8px); right: 0; z-index: 45;
+      flex-direction: column; align-items: stretch; gap: 8px; min-width: 210px;
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px;
+      box-shadow: 0 16px 40px rgba(15,23,42,.20);
+    }
+    #hdr-tools.open > button { justify-content: flex-start; }
+    @media (min-width: 1024px) {
+      #hdr-tools, #hdr-tools.open {
+        display: flex; position: static; flex-direction: row; align-items: center;
+        gap: 0.625rem; min-width: 0; background: none; border: 0; padding: 0; box-shadow: none;
+      }
+      #hdr-tools.open > button { justify-content: center; }
+      #hdr-tools-btn { display: none !important; }
+    }
+    .dark #hdr-tools.open { background: #1e293b; border-color: #334155; }
     /* Interactive guided tour */
     #tour-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
     #tour-hole {
@@ -277,7 +295,7 @@
   const I18N = {
     it: {
       nav_dashboard:'Dashboard Analitica', nav_cases:'Gestione Pratiche', at_risk:'{n} a rischio', no_risk:'Nessun rischio',
-      manual:'Manuale', guide:'Guida', reset_tooltip:'Ripristina dati demo', logout:'Esci', profile_tooltip:'Profilo', demo_local:'Demo locale', demo_local_tip:'Profilo operatore (modalità demo locale)',
+      manual:'Manuale', guide:'Guida', tools:'Strumenti', reset_tooltip:'Ripristina dati demo', logout:'Esci', profile_tooltip:'Profilo', demo_local:'Demo locale', demo_local_tip:'Profilo operatore (modalità demo locale)',
       demo_banner:'<b>Modalità demo locale attiva.</b> I dati sono salvati solo in questo browser. Inserisci la tua configurazione in <code class="rounded bg-amber-100 px-1 py-0.5 font-mono">FIREBASE_CONFIG</code> per abilitare login e database cloud condiviso.',
       dash_title:'Dashboard Analitica', dash_subtitle:'Visione globale del pipeline di trasferimento.',
       kpi_active:'Pratiche Attive', kpi_active_sub:'In lavorazione (step 1–10)', kpi_missing:'Documenti Mancanti', kpi_missing_sub:'Candidati con doc. da caricare',
@@ -341,7 +359,7 @@
     },
     en: {
       nav_dashboard:'Analytics Dashboard', nav_cases:'Case Management', at_risk:'{n} at risk', no_risk:'No risk',
-      manual:'Manual', guide:'Guide', reset_tooltip:'Reset demo data', logout:'Sign out', profile_tooltip:'Profile', demo_local:'Local demo', demo_local_tip:'Operator profile (local demo mode)',
+      manual:'Manual', guide:'Guide', tools:'Tools', reset_tooltip:'Reset demo data', logout:'Sign out', profile_tooltip:'Profile', demo_local:'Local demo', demo_local_tip:'Operator profile (local demo mode)',
       demo_banner:'<b>Local demo mode active.</b> Data is saved only in this browser. Fill in your <code class="rounded bg-amber-100 px-1 py-0.5 font-mono">FIREBASE_CONFIG</code> to enable login and a shared cloud database.',
       dash_title:'Analytics Dashboard', dash_subtitle:'Global view of the transfer pipeline.',
       kpi_active:'Active Cases', kpi_active_sub:'In progress (steps 1–10)', kpi_missing:'Missing Documents', kpi_missing_sub:'Candidates with docs to upload',
@@ -404,7 +422,7 @@
     },
     es: {
       nav_dashboard:'Panel Analítico', nav_cases:'Gestión de Expedientes', at_risk:'{n} en riesgo', no_risk:'Sin riesgo',
-      manual:'Manual', guide:'Guía', reset_tooltip:'Restablecer datos demo', logout:'Salir', profile_tooltip:'Perfil', demo_local:'Demo local', demo_local_tip:'Perfil del operador (modo demo local)',
+      manual:'Manual', guide:'Guía', tools:'Herramientas', reset_tooltip:'Restablecer datos demo', logout:'Salir', profile_tooltip:'Perfil', demo_local:'Demo local', demo_local_tip:'Perfil del operador (modo demo local)',
       demo_banner:'<b>Modo demo local activo.</b> Los datos se guardan solo en este navegador. Rellena tu <code class="rounded bg-amber-100 px-1 py-0.5 font-mono">FIREBASE_CONFIG</code> para habilitar el inicio de sesión y una base de datos en la nube compartida.',
       dash_title:'Panel Analítico', dash_subtitle:'Visión global del proceso de traslado.',
       kpi_active:'Expedientes Activos', kpi_active_sub:'En curso (pasos 1–10)', kpi_missing:'Documentos Faltantes', kpi_missing_sub:'Candidatos con docs por subir',
@@ -2265,15 +2283,18 @@
           tab('documents', t('nav_docs'), 'folder-archive') +
           (isAdmin() ? tab('settings', t('settings'), 'settings') : '') +
         '</nav>' +
-        '<div class="ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">' +
+        '<div class="relative ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">' +
           (riskCount > 0
             ? '<button data-action="show-risk" class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-100"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + t('at_risk', { n: riskCount }) + '</button>'
             : '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>' + t('no_risk') + '</span>') +
-          '<button data-action="toggle-theme" class="inline-flex items-center justify-center rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('theme_toggle')) + '"><i data-lucide="' + (THEME === 'dark' ? 'sun' : 'moon') + '" class="h-3.5 w-3.5"></i></button>' +
-          langSwitcher(false) +
-          '<button data-action="open-manual" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="book-open" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('manual') + '</span></button>' +
-          '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('guide') + '</span></button>' +
-          (isAdmin() ? '<button data-action="reset" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i></button>' : '') +
+          '<button data-action="toggle-tools" id="hdr-tools-btn" class="inline-flex items-center justify-center rounded-xl px-2.5 py-2 text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 lg:hidden" data-tip-pos="bottom-left" data-tooltip="' + escapeHtml(t('tools')) + '"><i data-lucide="settings-2" class="h-4 w-4"></i></button>' +
+          '<div id="hdr-tools">' +
+            '<button data-action="toggle-theme" class="inline-flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('theme_toggle')) + '"><i data-lucide="' + (THEME === 'dark' ? 'sun' : 'moon') + '" class="h-3.5 w-3.5"></i><span class="lg:hidden">' + t('theme_toggle') + '</span></button>' +
+            langSwitcher(false) +
+            '<button data-action="open-manual" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="book-open" class="h-3.5 w-3.5"></i><span>' + t('manual') + '</span></button>' +
+            '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span>' + t('guide') + '</span></button>' +
+            (isAdmin() ? '<button data-action="reset" class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i><span class="lg:hidden">' + t('reset_tooltip') + '</span></button>' : '') +
+          '</div>' +
           userCluster() +
         '</div>' +
       '</div>' +
@@ -3037,9 +3058,15 @@
   //  EVENT DELEGATION
   // =====================================================================================
   document.addEventListener('click', (e) => {
+    // Close the mobile "tools" dropdown when clicking outside it (or its toggle button).
+    const _menu = document.getElementById('hdr-tools');
+    if (_menu && _menu.classList.contains('open') && !e.target.closest('#hdr-tools') && !e.target.closest('#hdr-tools-btn')) {
+      _menu.classList.remove('open');
+    }
     const t = e.target.closest('[data-action]');
     if (!t) return;
     const a = t.getAttribute('data-action');
+    if (a === 'toggle-tools') { if (_menu) _menu.classList.toggle('open'); return; }
     switch (a) {
       case 'set-view': setView(t.getAttribute('data-view')); break;
       case 'open-nurse': selectNurse(t.getAttribute('data-id')); break;
@@ -3081,6 +3108,9 @@
       case 'delete-entity': deleteEntity(t.getAttribute('data-type'), t.getAttribute('data-id')); break;
       case 'set-demo-role': setDemoRole(t.getAttribute('data-role')); break;
     }
+    // Any action selected from the mobile tools dropdown should close it.
+    const _m2 = document.getElementById('hdr-tools');
+    if (_m2) _m2.classList.remove('open');
   });
 
   // Close any open modal / tour with the Escape key.
