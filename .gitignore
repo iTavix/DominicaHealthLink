@@ -1,0 +1,20 @@
+# NEVER commit Firebase service-account keys or other secrets
+scripts/serviceAccountKey.json
+**/serviceAccount*.json
+*.pem
+.env
+.env.*
+
+# Node
+node_modules/
+scripts/node_modules/
+
+# OS
+.DS_Store
+
+# Build output
+dist/
+
+# Local-only files (never on GitHub)
+index.single-file.bak.html
+FIREBASE-SETUP copia.md

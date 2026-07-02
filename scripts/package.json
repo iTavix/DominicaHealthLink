@@ -1,0 +1,9 @@
+{
+  "name": "dominicahealthlink-admin-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Admin scripts for DominicaHealthLink (set role custom claims).",
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

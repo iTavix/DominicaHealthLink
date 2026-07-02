@@ -4,6 +4,12 @@
 > Non serve essere programmatori: basta seguire i passaggi nell'ordine e leggere i riquadri 💡 che
 > spiegano *perché* stai facendo una certa cosa. Prenditi con calma: la prima volta sono ~30 minuti.
 
+> ⚠️ **Aggiornamento (luglio 2026):** il progetto è passato da un singolo `index.html` a una
+> struttura con build (Vite). Due differenze rispetto a quanto scritto sotto:
+> 1. il blocco `const FIREBASE_CONFIG = { ... }` ora sta in **`src/app.js`** (non in `index.html`);
+> 2. per avviare l'app in locale si usa **`npm run dev`** (vedi `README.md`), non più il
+>    mini-server Python. Tutto il resto della guida (console Firebase, regole, ruoli) resta valido.
+
 ---
 
 ## 0. Cosa stiamo per fare (in parole semplici)
@@ -204,6 +210,22 @@ Da questo momento:
 > 💡 **Nota pratica:** in questa modalità i salvataggi avvengono "a blocchi": se due persone modificano
 > *nello stesso istante*, l'ultimo che salva vince. Per un team piccolo va benissimo. Se sarete in
 > *tanti* a scrivere contemporaneamente, chiedi la variante "un documento per pratica" (più robusta).
+
+---
+
+## Passo 7-bis — Caricamento dei file dei documenti (Firebase Storage)
+
+Nella sezione "Ciclo di Vita dei Documenti", il pulsante **Carica** apre il selettore di file del
+computer e allega il documento (PDF, foto, scansione). Per salvarli **nel cloud** (consigliato con dati
+veri) attiva **Storage**:
+
+1. Console Firebase → **Build → Storage** → **"Inizia"** → conferma (modalità produzione).
+2. Pubblica le regole dei file: incolla il contenuto di `storage.rules` in **Storage → Regole** →
+   **Pubblica** (oppure da terminale: `firebase deploy --only storage`).
+
+> 💡 **Senza Storage** l'app funziona lo stesso: i file piccoli vengono salvati localmente per
+> l'anteprima. Per documenti grandi e condivisi tra dispositivi serve Storage attivo.
+> Le regole fanno sì che ogni utente veda solo i propri file (o, in modalità team, solo gli operatori).
 
 ---
 
