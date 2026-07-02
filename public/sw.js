@@ -42,7 +42,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => { if (res.ok) cachePut(req, res); return res; })
-        .catch(() => caches.match(req).then((hit) => hit || caches.match('/index.html')))
+        .catch(() => caches.match(req).then((hit) => hit || caches.match(self.registration.scope)))
     );
     return;
   }

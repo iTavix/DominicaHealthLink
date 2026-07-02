@@ -6,6 +6,8 @@ import './app.js';
 // builds so the dev server never fights with a stale cache.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => { /* offline support is best-effort */ });
+    // BASE_URL-relative so it resolves correctly both at the domain root and under
+    // a sub-path like GitHub Pages' /DominicaHealthLink/.
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => { /* offline support is best-effort */ });
   });
 }
