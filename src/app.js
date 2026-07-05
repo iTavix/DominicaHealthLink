@@ -9,6 +9,7 @@ import 'firebase/compat/firestore';
 import 'firebase/compat/storage';
 import { createIcons, icons as lucideIcons } from 'lucide';
 import { STEP_I18N, CHECKLIST_I18N, I18N } from './i18n-data.js';
+import { guideToc, guideBody } from './guide-content.js';
 
 // Shim with the same shape as the old lucide UMD global: lucide.createIcons().
 const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(opts || {}) }) };
@@ -1159,17 +1160,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       .catch((e) => profileMsg(translateAuthError(e), 'err'));
   }
 
-  // ---------- In-app operator manual (self-contained, no external file) ----------
-  function openManual() {
-    closeManual();
-    const o = document.createElement('div');
-    o.id = 'manual-overlay';
-    o.className = 'fixed inset-0 z-[80] overflow-y-auto bg-slate-100';
-    o.innerHTML = manualHtml();
-    document.body.appendChild(o);
-    document.documentElement.classList.add('overflow-hidden');
-    lucide.createIcons();
-    // Scroll-spy: highlight the current section in the table of contents.
+  // ---------- Fullscreen document overlays (operator manual + regulatory guide) ----------
+  // Scroll-spy shared by both overlays: highlight the current section in the TOC.
+  function attachTocSpy(o) {
     const links = Array.prototype.slice.call(o.querySelectorAll('.toc-link'));
     const map = {};
     links.forEach((l) => { const id = l.getAttribute('href').slice(1); const el = o.querySelector('#' + id); if (el) map[id] = l; });
@@ -1182,10 +1175,49 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       Object.keys(map).forEach((id) => obs.observe(o.querySelector('#' + id)));
     } catch (e) { /* IntersectionObserver opzionale */ }
   }
-  function closeManual() {
-    const o = document.getElementById('manual-overlay');
+  // Only one document overlay at a time (the print CSS relies on this).
+  function openDocOverlay(id, html) {
+    closeManual(); closeGuide();
+    const o = document.createElement('div');
+    o.id = id;
+    o.className = 'fixed inset-0 z-[80] overflow-y-auto bg-slate-100';
+    o.innerHTML = html;
+    document.body.appendChild(o);
+    document.documentElement.classList.add('overflow-hidden');
+    lucide.createIcons();
+    attachTocSpy(o);
+  }
+  function closeDocOverlay(id) {
+    const o = document.getElementById(id);
     if (o) o.remove();
     document.documentElement.classList.remove('overflow-hidden');
+  }
+
+  // ---------- In-app operator manual (self-contained, no external file) ----------
+  function openManual() { openDocOverlay('manual-overlay', manualHtml()); }
+  function closeManual() { closeDocOverlay('manual-overlay'); }
+
+  // ---------- Regulatory guide (content in src/guide-content.js) ----------
+  function openGuide() { openDocOverlay('guide-overlay', guideHtml()); }
+  function closeGuide() { closeDocOverlay('guide-overlay'); }
+
+  function guideHtml() {
+    const toc = guideToc(LANG).map((item) => '<a href="#' + item[0] + '" class="toc-link block rounded-lg px-3 py-1.5 text-slate-600 transition hover:bg-slate-50">' + item[1] + '</a>').join('');
+    return '' +
+    '<div class="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">' +
+      '<div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-5">' +
+        '<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow"><i data-lucide="scale" class="h-4 w-4"></i></div>' +
+        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('norm_guide_title') + '</h1><p class="text-xs text-slate-500">DominicaHealthLink · Normativa</p></div>' +
+        '<div class="ml-auto flex items-center gap-2">' +
+          '<button onclick="window.print()" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="printer" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('manual_btn_print') + '</span></button>' +
+          '<button data-action="close-guide" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="x" class="h-3.5 w-3.5"></i>' + t('manual_close') + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mx-auto flex max-w-6xl gap-8 px-4 py-8 sm:px-5">' +
+      '<aside class="no-print hidden w-60 shrink-0 lg:block"><nav class="sticky top-24 space-y-0.5 text-sm"><p class="mb-2 px-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">' + t('manual_index') + '</p>' + toc + '</nav></aside>' +
+      '<main class="min-w-0 flex-1 space-y-12">' + guideBody(LANG) + '</main>' +
+    '</div>';
   }
 
   function manualHtml() {
@@ -1993,6 +2025,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             '<button data-action="toggle-theme" class="inline-flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('theme_toggle')) + '"><i data-lucide="' + (THEME === 'dark' ? 'sun' : 'moon') + '" class="h-3.5 w-3.5"></i><span class="lg:hidden">' + t('theme_toggle') + '</span></button>' +
             langSwitcher(false) +
             '<button data-action="open-manual" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="book-open" class="h-3.5 w-3.5"></i><span>' + t('manual') + '</span></button>' +
+            '<button data-action="open-guide" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="scale" class="h-3.5 w-3.5"></i><span>' + t('norm_guide') + '</span></button>' +
             '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span>' + t('guide') + '</span></button>' +
             (isAdmin() ? '<button data-action="reset" class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i><span class="lg:hidden">' + t('reset_tooltip') + '</span></button>' : '') +
           '</div>' +
@@ -2871,6 +2904,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'reset-password': sendPasswordReset(); break;
       case 'open-manual': openManual(); break;
       case 'close-manual': closeManual(); break;
+      case 'open-guide': openGuide(); break;
+      case 'close-guide': closeGuide(); break;
       case 'set-lang': setLang(t.getAttribute('data-lang')); break;
       case 'toggle-theme': toggleTheme(); break;
       case 'show-risk': state.statusFilter = 'risk'; state.view = 'cases'; commit(); break;
@@ -2888,6 +2923,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('modal-layer')) closeModal();
+    else if (document.getElementById('guide-overlay')) closeGuide();
     else if (document.getElementById('manual-overlay')) closeManual();
     else if (tour.active) endTour(true);
   });
