@@ -550,7 +550,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   function deleteDocFile(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
     d.status = 'missing'; d.uploadDate = null;
-    d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileTooBig = false;
+    deleteStoredFile(d);
+    d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null; d.fileTooBig = false;
     pushLog(n, 'alert', t('log_author_system'), t('log_doc_deleted', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
@@ -567,10 +568,71 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   function rejectDoc(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
     d.status = 'missing'; d.uploadDate = null;
-    d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null;
+    deleteStoredFile(d);
+    d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null;
     pushLog(n, 'alert', t('log_author_system'), t('log_doc_rejected', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
+  }
+
+  // ---------- Firestore-based file storage (free plan: no Firebase Storage needed) ----------
+  // Files are kept as base64 data-URL strings split into ~0.7 MB chunks, one Firestore
+  // document per chunk: organizations/{org}/files/{fileId}_{i} in the shared workspace,
+  // nurseflow/{uid}/files/{fileId}_{i} in the private one. The nurse record only holds
+  // a tiny reference { id, chunks }, so the shared "cases" document stays small.
+  const FILE_CHUNK_SIZE = 720000;   // chars per chunk (Firestore doc limit is ~1 MiB)
+  const FILE_MAX_CHUNKS = 8;        // → max ~5.7 MB of data URL (~4.3 MB of file)
+  const fileCache = {};             // in-memory cache of reassembled data URLs
+
+  function fileChunkRef(fileId, i) {
+    const col = SHARED_WORKSPACE
+      ? db.collection('organizations').doc(ORG_ID).collection('files')
+      : db.collection('nurseflow').doc(currentUser.uid).collection('files');
+    return col.doc(fileId + '_' + i);
+  }
+  async function storeFileInFirestore(dataUrl) {
+    const fileId = uid();
+    const chunks = [];
+    for (let i = 0; i < dataUrl.length; i += FILE_CHUNK_SIZE) chunks.push(dataUrl.slice(i, i + FILE_CHUNK_SIZE));
+    for (let i = 0; i < chunks.length; i++) {
+      await fileChunkRef(fileId, i).set({ seq: i, of: chunks.length, data: chunks[i], updatedAt: serverTs() });
+    }
+    return { id: fileId, chunks: chunks.length };
+  }
+  async function loadStoredFile(d) {
+    if (d.fileUrl) return d.fileUrl;
+    if (!d.fileStore || !(fbEnabled && db && currentUser)) return null;
+    if (fileCache[d.fileStore.id]) return fileCache[d.fileStore.id];
+    const parts = [];
+    for (let i = 0; i < d.fileStore.chunks; i++) {
+      const snap = await fileChunkRef(d.fileStore.id, i).get();
+      if (!snap.exists) return null;
+      parts.push(snap.data().data);
+    }
+    const url = parts.join('');
+    fileCache[d.fileStore.id] = url;
+    return url;
+  }
+  function deleteStoredFile(d) {
+    if (!d || !d.fileStore) return;
+    if (fbEnabled && db && currentUser) {
+      for (let i = 0; i < d.fileStore.chunks; i++) fileChunkRef(d.fileStore.id, i).delete().catch(() => { /* best effort */ });
+    }
+    delete fileCache[d.fileStore.id];
+  }
+  // Phone photos of documents are huge: downscale them client-side before storing.
+  async function compressImageFile(file) {
+    if (!/^image\//.test(file.type) || file.size <= 600 * 1024) return null;
+    try {
+      const dataUrl = await readAsDataURL(file);
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = dataUrl; });
+      const MAX = 1800;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      return cv.toDataURL('image/jpeg', 0.82);
+    } catch (e) { return null; }
   }
 
   // ---------- Real file upload for documents ----------
@@ -609,32 +671,35 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     d.fileSize = file.size;
     d.uploadDate = new Date().toISOString().slice(0, 10);
     d.status = 'pending';
-    d.fileUrl = null; d.fileStoragePath = null; d.fileTooBig = false;
+    // Replacing a file: best-effort cleanup of the previous Firestore copy.
+    deleteStoredFile(d);
+    d.fileUrl = null; d.fileStoragePath = null; d.fileStore = null; d.fileTooBig = false;
 
-    let cloudErr = null;
-    try {
-      if (fbEnabled && storage && currentUser) {
-        // Upload the real bytes to Firebase Storage; keep only the download URL in the DB.
-        const base = SHARED_WORKSPACE ? ('documents/org/' + ORG_ID) : ('documents/users/' + currentUser.uid);
-        const path = base + '/' + ctx.docId + '/' + Date.now() + '_' + file.name;
-        const ref = storage.ref().child(path);
-        const snap = await ref.put(file);
-        d.fileUrl = await snap.ref.getDownloadURL();
-        d.fileStoragePath = path;
+    let dataUrl = await compressImageFile(file);
+    if (!dataUrl) { try { dataUrl = await readAsDataURL(file); } catch (e2) { dataUrl = null; } }
+
+    if (!dataUrl || dataUrl.length > FILE_CHUNK_SIZE * FILE_MAX_CHUNKS) {
+      // Even after compression the file exceeds what the free plan can hold.
+      d.fileTooBig = true;
+      pushLog(n, 'alert', t('log_author_system'), t('log_file_too_big', { x: d.name }));
+    } else if (fbEnabled && db && currentUser) {
+      // Cloud mode without Firebase Storage: chunked copy inside Firestore, shared
+      // with the whole team. The nurse record only stores the tiny reference.
+      try {
+        d.fileStore = await storeFileInFirestore(dataUrl);
+        fileCache[d.fileStore.id] = dataUrl;
+      } catch (err) {
+        console.warn('Salvataggio file su Firestore fallito:', err && err.message);
+        d.fileName = null; d.fileSize = null; d.uploadDate = null; d.status = 'missing';
+        pushLog(n, 'alert', t('log_author_system'), t('log_upload_cloud_failed', { x: d.name }));
+        n.lastUpdate = new Date().toISOString().slice(0, 10);
+        commit();
+        return;
       }
-    } catch (err) {
-      cloudErr = err;
-      console.warn('Upload su Storage fallito:', err && err.message);
-    }
-    // Cloud unavailable (Storage disabled / rules) or demo mode: keep the file viewable
-    // anyway by embedding small files as a data URL.
-    if (!d.fileUrl) {
-      if (file.size <= 900 * 1024) {
-        try { d.fileUrl = await readAsDataURL(file); } catch (e2) { /* ignore */ }
-      } else {
-        d.fileTooBig = true;
-      }
-      if (cloudErr) pushLog(n, 'alert', t('log_author_system'), t('log_upload_cloud_failed', { x: d.name }));
+    } else {
+      // Local demo mode: embed in localStorage (small files only, quota permitting).
+      if (dataUrl.length <= 2 * 1024 * 1024) d.fileUrl = dataUrl;
+      else { d.fileTooBig = true; pushLog(n, 'alert', t('log_author_system'), t('log_file_too_big', { x: d.name })); }
     }
     pushLog(n, 'note', t('log_author_system'), t('log_doc_uploaded', { x: d.name }));
     // Uploading the signed privacy form marks the consent as acquired on the record.
@@ -903,6 +968,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (!isAdmin()) return;
     const n = getNurse(id); if (!n) return;
     if (!confirm(t('confirm_delete_nurse', { x: n.name }))) return;
+    (n.documents || []).forEach((d) => deleteStoredFile(d));
     state.nurses = state.nurses.filter((x) => x.id !== id);
     if (state.selectedNurseId === id) state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
     editNurseId = null;
@@ -966,24 +1032,30 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (/\.pdf$/i.test(name || '') || /^data:application\/pdf/.test(url || '')) return 'pdf';
     return 'other';
   }
-  function openDocPreview(nurseId, docId) {
+  async function openDocPreview(nurseId, docId) {
     const n = getNurse(nurseId); const d = n && n.documents.find((x) => x.id === docId);
     if (!d) return;
+    let url = d.fileUrl;
+    if (!url && d.fileStore) {
+      // Chunked Firestore file: show a lightweight loading modal while reassembling.
+      modalShell('<div class="p-10 text-center text-sm text-slate-400"><i data-lucide="loader-2" class="mx-auto mb-2 h-6 w-6 animate-spin text-indigo-400"></i>' + t('doc_loading') + '</div>');
+      try { url = await loadStoredFile(d); } catch (e) { url = null; }
+    }
     let inner;
-    if (!d.fileUrl) {
+    if (!url) {
       inner = '<div class="p-10 text-center text-sm text-slate-400"><i data-lucide="file-x" class="mx-auto mb-2 h-8 w-8 text-slate-300"></i>' + t('doc_no_file') + '</div>';
     } else {
-      const kind = fileKind(d.fileName, d.fileUrl);
-      if (kind === 'image') inner = '<div class="flex justify-center bg-slate-100 p-4"><img src="' + escapeHtml(d.fileUrl) + '" alt="' + escapeHtml(d.fileName || '') + '" class="max-h-[70vh] rounded-lg object-contain" /></div>';
-      else if (kind === 'pdf') inner = '<iframe src="' + escapeHtml(d.fileUrl) + '" class="h-[72vh] w-full" title="' + escapeHtml(d.fileName || '') + '"></iframe>';
-      else inner = '<div class="p-10 text-center"><a href="' + escapeHtml(d.fileUrl) + '" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"><i data-lucide="download" class="h-4 w-4"></i>' + t('doc_view') + '</a></div>';
+      const kind = fileKind(d.fileName, url);
+      if (kind === 'image') inner = '<div class="flex justify-center bg-slate-100 p-4"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(d.fileName || '') + '" class="max-h-[70vh] rounded-lg object-contain" /></div>';
+      else if (kind === 'pdf') inner = '<iframe src="' + escapeHtml(url) + '" class="h-[72vh] w-full" title="' + escapeHtml(d.fileName || '') + '"></iframe>';
+      else inner = '<div class="p-10 text-center"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"><i data-lucide="download" class="h-4 w-4"></i>' + t('doc_view') + '</a></div>';
     }
     const head =
       '<div class="flex items-center justify-between border-b border-slate-100 p-4">' +
         '<div class="min-w-0"><p class="truncate text-sm font-bold text-slate-900">' + escapeHtml(d.name) + '</p>' +
           '<p class="truncate text-xs text-slate-500">' + escapeHtml(n.name) + (d.fileName ? ' · ' + escapeHtml(d.fileName) : '') + '</p></div>' +
         '<div class="flex items-center gap-2">' +
-          (d.fileUrl ? '<a href="' + escapeHtml(d.fileUrl) + '" target="_blank" rel="noopener" class="rounded-lg px-2 py-1 text-slate-400 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="external-link" class="h-4 w-4"></i></a>' : '') +
+          (url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" class="rounded-lg px-2 py-1 text-slate-400 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="external-link" class="h-4 w-4"></i></a>' : '') +
           '<button data-action="close-modal" class="text-slate-300 transition hover:text-slate-500"><i data-lucide="x" class="h-5 w-5"></i></button>' +
         '</div>' +
       '</div>';
@@ -2656,7 +2728,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       const statusIcon = d.status === 'approved' ? '<i data-lucide="check-circle-2" class="h-4 w-4 shrink-0 text-emerald-500"></i>'
         : d.status === 'pending' ? '<i data-lucide="clock" class="h-4 w-4 shrink-0 text-amber-500"></i>'
         : '<i data-lucide="' + (d.optional ? 'circle-dashed' : 'x-circle') + '" class="h-4 w-4 shrink-0 ' + (d.optional ? 'text-slate-300' : 'text-rose-400') + '"></i>';
-      const viewBtn = (d.fileName && d.fileUrl)
+      const viewBtn = (d.fileName && (d.fileUrl || d.fileStore))
         ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="eye" class="h-3.5 w-3.5"></i></button>'
         : '';
       const uploadBtn = '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
@@ -2759,7 +2831,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             '</div>';
       const fileLine = d.fileName
         ? '<p class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><i data-lucide="paperclip" class="h-3 w-3"></i>' +
-            (d.fileUrl ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="font-medium text-indigo-500 underline-offset-2 hover:underline">' + escapeHtml(d.fileName) + '</button>' : escapeHtml(d.fileName)) +
+            ((d.fileUrl || d.fileStore) ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="font-medium text-indigo-500 underline-offset-2 hover:underline">' + escapeHtml(d.fileName) + '</button>' : escapeHtml(d.fileName)) +
             (d.fileTooBig ? ' <span class="text-amber-500">(' + escapeHtml(t('file_too_big')) + ')</span>' : '') + '</p>'
         : '';
       return '<tr class="border-b border-slate-100 last:border-0">' +

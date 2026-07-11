@@ -40,6 +40,18 @@ service cloud.firestore {
       allow write: if isAdmin() && request.resource.size() < 1048576;
     }
 
+    // ---- Document files stored in Firestore (free plan, no Firebase Storage) ----
+    // Each uploaded file is split into base64 chunks of < 1 MB, one document per
+    // chunk. Same access rules as the case data they belong to.
+    match /organizations/{orgId}/files/{chunkId} {
+      allow read, delete: if isOperator();
+      allow create, update: if isOperator() && request.resource.size() < 1048576;
+    }
+    match /nurseflow/{userId}/files/{chunkId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && request.resource.size() < 1048576;
+    }
+
     // ---- Deny everything else by default ----
     match /{document=**} {
       allow read, write: if false;
