@@ -188,7 +188,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       id: 'nurse_ana',
       name: 'Ana Valeria Rosario',
       passport: 'RD-DX1184220',
-      origin: 'Santo Domingo, Repubblica Dominicana',
+      birthPlace: 'Santo Domingo',
+      nationality: 'Dominicana',
       partnerAgency: 'Caribe Health Recruiting SRL',
       languageLevel: 'A2 — in formazione',
       employer: 'Casa di Cura San Raffaele · Milano',
@@ -221,7 +222,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       id: 'nurse_carlos',
       name: 'Carlos Manuel Tejeda',
       passport: 'RD-AK7740915',
-      origin: 'Santiago de los Caballeros, Repubblica Dominicana',
+      birthPlace: 'Santiago de los Caballeros',
+      nationality: 'Dominicana',
       partnerAgency: 'Antillas Nursing Partners',
       languageLevel: 'B1 — certificato CELI',
       employer: 'Azienda Ospedaliera di Padova',
@@ -256,7 +258,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       id: 'nurse_elena',
       name: 'Elena Maria Santos',
       passport: 'RD-MP3320877',
-      origin: 'La Romana, Repubblica Dominicana',
+      birthPlace: 'La Romana',
+      nationality: 'Dominicana',
       partnerAgency: 'Caribe Health Recruiting SRL',
       languageLevel: 'B2 — certificato CELI',
       employer: 'Azienda Ospedaliera di Padova',
@@ -376,6 +379,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     // Backfill the personal anagrafica fields and document slots on every saved nurse.
     (s.nurses || []).forEach((n) => {
       PERSONAL_FIELDS.forEach((k) => { if (n[k] === undefined) n[k] = ''; });
+      // The legacy "origin" field was superseded by birth place + nationality:
+      // migrate its value into the birth place (when empty) and drop it.
+      if (n.origin) { if (!n.birthPlace) n.birthPlace = n.origin; delete n.origin; }
       if (n.privacyConsent === undefined) n.privacyConsent = false;
       if (n.privacyConsentDate === undefined) n.privacyConsentDate = null;
       if (!Array.isArray(n.documents)) n.documents = [];
@@ -716,7 +722,6 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         ], e ? (e.maritalStatus || '') : '') +
         inputField('nn-phone', t('nn_phone'), '+1 809 000 0000', false, 'tel') +
         inputField('nn-email', t('nn_email'), 'nome@example.com', false, 'email') +
-        inputField('nn-origin', t('nn_origin'), 'Santo Domingo') +
         '<div class="sm:col-span-2">' + inputField('nn-address', t('nn_address'), 'Calle, numero, città, provincia') + '</div>' +
         selectField('nn-agency', t('nn_agency'), agencyOptions(), e ? e.partnerAgency : '') +
         inputField('nn-lang', t('nn_lang'), 'A2') +
@@ -737,7 +742,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     modalShell(inner);
     if (e) {
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
-      set('nn-name', e.name); set('nn-passport', e.passport); set('nn-origin', e.origin); set('nn-lang', e.languageLevel);
+      set('nn-name', e.name); set('nn-passport', e.passport); set('nn-lang', e.languageLevel);
       set('nn-cedula', e.cedula); set('nn-birthdate', e.birthDate); set('nn-birthplace', e.birthPlace);
       set('nn-nationality', e.nationality); set('nn-phone', e.phone); set('nn-email', e.email); set('nn-address', e.address);
     }
@@ -758,7 +763,6 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       const e = getNurse(editNurseId);
       if (e) {
         e.name = name; e.passport = passport;
-        e.origin = fieldVal('nn-origin') || e.origin;
         e.partnerAgency = fieldVal('nn-agency') || '—';
         e.languageLevel = fieldVal('nn-lang') || e.languageLevel;
         e.employer = fieldVal('nn-employer') || t('nn_default_employer');
@@ -784,7 +788,6 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     }
     const nurse = {
       id: uid(), name: name, passport: passport,
-      origin: fieldVal('nn-origin') || t('nn_default_origin'),
       partnerAgency: fieldVal('nn-agency') || '—',
       languageLevel: fieldVal('nn-lang') || t('nn_default_lang'),
       employer: fieldVal('nn-employer') || t('nn_default_employer'),
@@ -881,11 +884,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
   function exportCandidatesCsv() {
     if (!isAdmin()) return;
-    const headers = ['Nome', 'Passaporto', 'Origine', 'Agenzia', 'Livello linguistico', 'Datore di lavoro', 'Referente HR', 'Step', 'Stato', 'Ultimo aggiornamento', 'Documenti approvati', 'Documenti totali'];
+    const headers = ['Nome', 'Passaporto', 'Luogo di nascita', 'Nazionalità', 'Agenzia', 'Livello linguistico', 'Datore di lavoro', 'Referente HR', 'Step', 'Stato', 'Ultimo aggiornamento', 'Documenti approvati', 'Documenti totali'];
     const lines = [headers.map(csvCell).join(',')];
     state.nurses.forEach((n) => {
       const appr = (n.documents || []).filter((d) => d.status === 'approved').length;
-      lines.push([n.name, n.passport, n.origin, n.partnerAgency, n.languageLevel, n.employer, n.hrReferent,
+      lines.push([n.name, n.passport, n.birthPlace, n.nationality, n.partnerAgency, n.languageLevel, n.employer, n.hrReferent,
         n.currentStep + '/11', statusLabel(deriveStatus(n)), n.lastUpdate, appr, (n.documents || []).length].map(csvCell).join(','));
     });
     // BOM so Excel opens UTF-8 correctly.
@@ -2519,7 +2522,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '<div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-xl font-extrabold text-white shadow-md shadow-indigo-200">' + escapeHtml(initials) + '</div>' +
         '<div class="min-w-0 flex-1">' +
           '<h2 class="text-lg font-extrabold text-slate-900">' + escapeHtml(n.name) + '</h2>' +
-          '<p class="text-sm text-slate-500">' + escapeHtml(n.origin) + '</p>' +
+          '<p class="text-sm text-slate-500">' + escapeHtml([n.birthPlace, n.nationality].filter(Boolean).join(' · ') || '—') + '</p>' +
         '</div>' +
         '<div class="flex flex-col items-start gap-2 sm:items-end">' +
           statusBadge(deriveStatus(n)) +
