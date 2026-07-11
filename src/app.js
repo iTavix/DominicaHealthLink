@@ -327,16 +327,17 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     };
   }
 
-  // Personal-file slots every candidate gets: identity/CV always required, certificates
-  // optional (only if required by law / by the role) — optional docs never block the
-  // pipeline nor flag the case as "Missing Docs".
+  // Personal-file slots every candidate gets. Required: identity documents, signed
+  // privacy consent and language certificate (needed for visa/OPI). Optional: photo,
+  // CV and criminal/health certificates (only if required by law / by the role) —
+  // optional docs never block the pipeline nor flag the case as "Missing Docs".
   const PERSONAL_DOC_TYPES = [
     { name: 'Copia Passaporto', language: 'ES' },
     { name: 'Cédula (Documento d’Identità RD)', language: 'ES' },
-    { name: 'Fotografia (formato tessera)', language: 'ES' },
-    { name: 'Curriculum Vitae', language: 'ES' },
+    { name: 'Fotografia (formato tessera)', language: 'ES', optional: true },
+    { name: 'Curriculum Vitae', language: 'ES', optional: true },
     { name: 'Consenso Privacy Firmato', language: 'IT' },
-    { name: 'Certificato di Lingua', language: 'IT', optional: true },
+    { name: 'Certificato di Lingua', language: 'IT' },
     { name: 'Certificato Penale', language: 'ES', optional: true },
     { name: 'Certificato Sanitario', language: 'ES', optional: true },
   ];
@@ -365,6 +366,13 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     PERSONAL_DOC_TYPES.forEach((d) => {
       if (typeNames.indexOf(d.name.toLowerCase()) < 0) s.settings.docTypes.push({ id: uid(), name: d.name, language: d.language, optional: !!d.optional });
     });
+    // Keep the required/optional flag of the personal slots in sync with PERSONAL_DOC_TYPES,
+    // so flag changes in later versions propagate to already-saved states.
+    const flagByName = {};
+    PERSONAL_DOC_TYPES.forEach((d) => { flagByName[d.name.toLowerCase()] = !!d.optional; });
+    const syncFlag = (d) => { const f = flagByName[(d.name || '').toLowerCase()]; if (f !== undefined) d.optional = f; };
+    s.settings.docTypes.forEach(syncFlag);
+    (s.nurses || []).forEach((n) => { (n.documents || []).forEach(syncFlag); });
     // Backfill the personal anagrafica fields and document slots on every saved nurse.
     (s.nurses || []).forEach((n) => {
       PERSONAL_FIELDS.forEach((k) => { if (n[k] === undefined) n[k] = ''; });
