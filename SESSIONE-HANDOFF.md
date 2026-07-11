@@ -26,7 +26,28 @@
 - `index.html` (shell + splash) · `src/app.js` (tutta la logica, ~3400 righe) · `src/i18n-data.js` (IT/EN/ES) · `src/guide-content.js` (guida normativa, sync manuale col .md alla radice) · `src/styles.css` · `public/sw.js` (service worker)
 - Comandi: `npm run dev` / `build` / `preview` (preview prod: porta 4599 = launch `nurseflow`; demo: 4601 = `dhldemo`)
 
-## 3. Funzionalità implementate in questa sessione (tutte online)
+## 3. Funzionalità implementate
+
+### Sessione 11 lug 2026 (pomeriggio) — NUOVA STRUTTURA A 9 FASI (non ancora deployata)
+
+Implementata la struttura di «struttura progetto.md»: il workflow è passato da **11 stati a 9 fasi divise in 2 team**:
+- **Team Rep. Dominicana (fasi 1-4)**: Selezione e Reclutamento · Gestione Documentale · Formazione · Organizzazione Viaggio
+- **Team Italia (fasi 5-9)**: Arrivo in Italia · Domicilio e Servizi · Matching · Rapporto di Lavoro · Tutor e Assistenza
+- La pratica è "completata" avanzando oltre la fase 9 (`currentStep = 10`, costante `DONE_STEP`).
+- **Migrazione automatica** dei dati esistenti in `normalizeState()`: rileva le pratiche vecchio formato (checklist con chiavi 10/11) e mappa gli step: 1→1, 2-7→2, 8-9→4, 10→5, 11→completata; le checklist vengono ricostruite sui nuovi modelli (fasi precedenti spuntate, fase corrente da rifare).
+- Gate documentale unificato sulla fase 2 (tutti i doc richiesti caricati E approvati per uscirne).
+- KPI "In attesa OPI" → "In Matching" (fase 7); badge "Visto Ottenuto" riusato come "Fase Italia" (fasi 5-9); "Trasferiti" = fase ≥ 5.
+- Stepper e distribuzione dashboard con bande colorate dei due team (🇩🇴 sky / 🇮🇹 emerald); manuale in-app riscritto (sez. 6 con tabella fasi per team, nota "una tantum vs operativo") in IT/EN/ES; checklist per fase trilingue nuove in `i18n-data.js`.
+- Gli accordi quadro UNA TANTUM (agenzie, alloggi, aziende, professionisti) NON stanno nelle checklist per candidato: solo attività OPER.
+- Testato su :4610 (config launch `nurseflow-4610` aggiunta perché 4599 era occupata da un'altra sessione), inclusa la migrazione con dati finti vecchio formato. ApiKey ripristinata, build ok.
+
+**Gestione team operatori** (stessa sessione):
+- Impostazioni → Operatori HR: nuovo campo **Team** (— / Rep. Dominicana / Italia), mostrato nella lista operatori, nel menù "Referente HR" del form candidato e nella scheda Contatto del candidato (es. «Dott. Bianchi · 🇮🇹 Team Italia»).
+- Filtro **«Il mio team»** in Gestione Pratiche: compare solo se l'operatore corrente ha un team; mostra i candidati nelle fasi del suo team (completati esclusi). Abbinamento operatore: per email in cloud (`currentOperator()`), per nome operatore locale (`dhl.operator.name`) in demo. Se il team non è assegnato il filtro è inerte (mostra tutto).
+- Backfill `team:''` sugli operatori salvati in `normalizeState()`. Demo seed: Ferraro=rd, Bianchi=it. Manuale §5.1 aggiornato (IT/EN/ES).
+- Sono etichette organizzative, NON permessi: tutti vedono e modificano tutto (permessi per team = eventuale evoluzione futura, richiederebbe regole Firestore).
+
+### Sessione 11 lug 2026 (mattina) — tutte online
 
 1. **Avvio mobile**: splash screen, niente flash del login (gate `authResolved`), render immediato da cache locale con refresh Firestore in background, service worker offline, safe-area iPhone.
 2. **Guida Normativa** in-app (overlay con TOC, note→fonti, stampa) tradotta IT/EN/ES.
