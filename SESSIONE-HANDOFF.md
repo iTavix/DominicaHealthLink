@@ -1,0 +1,61 @@
+# DominicaHealthLink / DHL Nurses — Handoff sessione
+
+> File di contesto per aprire una nuova sessione di lavoro con Claude.
+> Aggiornato: 11 luglio 2026. Incolla o referenzia questo file all'avvio:
+> *"Leggi DominicaHealthLink/SESSIONE-HANDOFF.md e continua da lì: voglio [obiettivo]."*
+
+---
+
+## 1. I due progetti
+
+| | Produzione | Demo presentazioni |
+|---|---|---|
+| Cartella | `~/Desktop/claude_code/DominicaHealthLink` | `~/Desktop/claude_code/demo_dhl_nurses` |
+| Repo | github.com/iTavix/DominicaHealthLink | github.com/iTavix/dhl-nurses-demo (pubblico) |
+| Live | itavix.github.io/DominicaHealthLink/ | itavix.github.io/dhl-nurses-demo/ |
+| Brand | DominicaHealthLink | **DHL Nurses** |
+| Backend | Firebase Auth + Firestore (workspace condiviso) | Nessuno: demo locale permanente (apiKey vuota) |
+
+**Deploy**: push su `main` → GitHub Action builda Vite e pubblica `dist/` su Pages (~1 min). Mai caricare file dall'interfaccia web di GitHub. Credenziali git nel portachiavi macOS (token con permessi Contents+Workflows).
+
+**La demo è una copia divergente**: le feature nuove del gestionale NON ci arrivano da sole — vanno riportate a mano se serve. La demo ha in più: welcome page con carosello automatico 6 slide, 6 candidati fittizi (step 2,3,5,8,9,11), banner da presentazione, brand DHL Nurses.
+
+## 2. Stack e struttura (identica nei due repo)
+
+- Vite 6 + Tailwind 3 compilato + lucide + firebase compat 10.12.2 (versioni bloccate in package.json)
+- `index.html` (shell + splash) · `src/app.js` (tutta la logica, ~3400 righe) · `src/i18n-data.js` (IT/EN/ES) · `src/guide-content.js` (guida normativa, sync manuale col .md alla radice) · `src/styles.css` · `public/sw.js` (service worker)
+- Comandi: `npm run dev` / `build` / `preview` (preview prod: porta 4599 = launch `nurseflow`; demo: 4601 = `dhldemo`)
+
+## 3. Funzionalità implementate in questa sessione (tutte online)
+
+1. **Avvio mobile**: splash screen, niente flash del login (gate `authResolved`), render immediato da cache locale con refresh Firestore in background, service worker offline, safe-area iPhone.
+2. **Guida Normativa** in-app (overlay con TOC, note→fonti, stampa) tradotta IT/EN/ES.
+3. **Anagrafica estesa e a 3 schede**: Dati anagrafici (nascita, nazionalità, stato civile, indirizzo, passaporto+scadenza, cédula+scadenza — scadenze a semaforo), Contatto (tel, email, agenzia, datore, referente HR), Competenze (ruolo, settore, durata esperienza + lingua). Campo "Origine" eliminato (migrato in luogo di nascita).
+4. **Documenti personali** con upload diretto dalla scheda: Passaporto, Cédula, Consenso Privacy Firmato, Cert. Lingua = richiesti; Foto, CV, Cert. Penale, Cert. Sanitario = facoltativi (badge, non bloccano la pipeline).
+5. **Privacy GDPR**: modulo bilingue IT/ES stampabile precompilato; l'upload del firmato registra il consenso con data + log.
+6. **Tabella documenti**: anteprima (occhio), stato = dropdown colorato con aggiornamento immediato e log, "Elimina" al posto di "Respingi" sugli approvati, layout 3 colonne (non si taglia più).
+7. **File senza Firebase Storage** (utente sul piano gratuito, NIENTE Blaze): chunk base64 ~0,7 MB in Firestore (`organizations/default/files/{fileId}_{i}`), foto compresse client-side (max 1800px JPEG), cap ~4 MB, anteprima ricompone i blocchi, pulizia automatica dei chunk su sostituzione/eliminazione.
+
+## 4. ⚠️ Cose in sospeso / da verificare a inizio sessione
+
+- [ ] **Regole Firestore da ripubblicare in console** (Firestore → Regole → incolla `firestore.rules` → Pubblica): senza, gli upload in produzione vengono annullati con avviso nel log. CHIEDERE se è stato fatto.
+- [ ] Verificare che `itavix.github.io` sia negli **Authorized domains** di Firebase Auth (serve per il login Google dal sito pubblicato).
+- [ ] Eventuali dati con file base64 incorporati caricati PRIMA del passaggio ai chunk: se la sync del team desse problemi di dimensione, migrare/ricaricare quei file.
+- [ ] Modulo privacy: il punto "1. Titolare del trattamento" è generico — inserire ragione sociale/contatti reali quando l'utente li fornisce.
+
+## 5. Come lavorare con questo utente (imparato sul campo)
+
+- **Batch dei deploy**: se ci sono modifiche pronte E una domanda aperta, chiedere PRIMA e fare UN solo commit+deploy (feedback esplicito dell'utente).
+- **Verifica UI post-login senza credenziali**: svuotare temporaneamente `apiKey` in `src/app.js` (→ demo locale, niente login), `npm run build`, testare su :4599, poi RIPRISTINARE la chiave prima del commit (`grep -c AIzaSy src/app.js` deve dare 1). La chiave è nel file, valore in git history.
+- **Browser preview**: misure DOM inaffidabili subito dopo un render e screenshot bianchi dopo scroll programmatico → rimisurare su DOM stabile / usare elementFromPoint.
+- **Dati salvati**: ogni nuovo campo nurse va aggiunto a `PERSONAL_FIELDS` + backfill in `normalizeState()`; nuovi doc-slot in `PERSONAL_DOC_TYPES` (flag optional sincronizzati automaticamente sugli stati salvati).
+- **Tailwind compilato**: mai costruire classi per concatenazione; solo stringhe complete.
+- L'utente scrive in italiano, non è sviluppatore: spiegazioni operative chiare, niente gergo; i passaggi in console Firebase/GitHub li fa lui su istruzioni puntuali.
+- Memoria persistente di Claude: vedi `memory/dominicahealthlink-app.md` e `feedback-batch-deploys.md`.
+
+## 6. Idee non ancora richieste (possibili prossimi passi)
+
+- Riportare nella demo le feature nuove del gestionale (schede anagrafica, ecc.)
+- Notifiche scadenze documenti (passaporto/cédula ora hanno le date)
+- Export PDF della scheda candidato
+- Migrazione dal SDK Firebase compat al modulare (bundle più piccolo)
