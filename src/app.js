@@ -323,9 +323,22 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         { id: uid(), name: 'Certificato Professionale (Exatec)', language: 'ES' },
         { id: uid(), name: 'Traduzione Asseverata del Titolo', language: 'IT' },
         { id: uid(), name: 'Legalizzazione (Apostille de La Haya)', language: 'IT' },
-      ],
+      ].concat(PERSONAL_DOC_TYPES.map((d) => ({ id: uid(), name: d.name, language: d.language, optional: !!d.optional }))),
     };
   }
+
+  // Personal-file slots every candidate gets: identity/CV always required, certificates
+  // optional (only if required by law / by the role) — optional docs never block the
+  // pipeline nor flag the case as "Missing Docs".
+  const PERSONAL_DOC_TYPES = [
+    { name: 'Copia Passaporto', language: 'ES' },
+    { name: 'Cédula (Documento d’Identità RD)', language: 'ES' },
+    { name: 'Fotografia (formato tessera)', language: 'ES' },
+    { name: 'Curriculum Vitae', language: 'ES' },
+    { name: 'Certificato di Lingua', language: 'IT', optional: true },
+    { name: 'Certificato Penale', language: 'ES', optional: true },
+    { name: 'Certificato Sanitario', language: 'ES', optional: true },
+  ];
 
   // ---------- Persistence ----------
   let state;
@@ -337,14 +350,31 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         if (parsed && parsed.nurses && parsed.nurses.length) return normalizeState(parsed);
       }
     } catch (e) { /* fall through to seed */ }
-    return seedState();
+    return normalizeState(seedState());
   }
   // Backfill fields added in later versions so older saved states keep working.
+  const PERSONAL_FIELDS = ['cedula', 'birthDate', 'birthPlace', 'nationality', 'maritalStatus', 'phone', 'email', 'address'];
   function normalizeState(s) {
     if (!s.settings) s.settings = defaultSettings();
     ['agencies', 'employers', 'operators', 'docTypes'].forEach((k) => { if (!Array.isArray(s.settings[k])) s.settings[k] = []; });
     // Backfill document types for states created before this feature existed.
     if (!s.settings.docTypes.length) s.settings.docTypes = defaultSettings().docTypes;
+    // Merge in the personal-file doc types added later (matched by name, case-insensitive).
+    const typeNames = s.settings.docTypes.map((dt) => (dt.name || '').toLowerCase());
+    PERSONAL_DOC_TYPES.forEach((d) => {
+      if (typeNames.indexOf(d.name.toLowerCase()) < 0) s.settings.docTypes.push({ id: uid(), name: d.name, language: d.language, optional: !!d.optional });
+    });
+    // Backfill the personal anagrafica fields and document slots on every saved nurse.
+    (s.nurses || []).forEach((n) => {
+      PERSONAL_FIELDS.forEach((k) => { if (n[k] === undefined) n[k] = ''; });
+      if (n.privacyConsent === undefined) n.privacyConsent = false;
+      if (n.privacyConsentDate === undefined) n.privacyConsentDate = null;
+      if (!Array.isArray(n.documents)) n.documents = [];
+      const docNames = n.documents.map((d) => (d.name || '').toLowerCase());
+      PERSONAL_DOC_TYPES.forEach((d) => {
+        if (docNames.indexOf(d.name.toLowerCase()) < 0) n.documents.push({ id: uid(), name: d.name, language: d.language, uploadDate: null, validity: null, status: 'missing', optional: !!d.optional });
+      });
+    });
     return s;
   }
   function serverTs() { return firebase.firestore.FieldValue.serverTimestamp(); }
@@ -411,7 +441,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
 
   function deriveStatus(nurse) {
     if (nurse.currentStep >= 11) return 'Onboarding Completed';
-    if (nurse.documents.some((d) => d.status === 'missing')) return 'Missing Docs';
+    // Optional documents (language/criminal/health certificates) never flag the case.
+    if (nurse.documents.some((d) => d.status === 'missing' && !d.optional)) return 'Missing Docs';
     if (nurse.currentStep === 8) return 'Visa Obtained';
     return 'In Progress';
   }
@@ -424,11 +455,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const pending = items.filter((i) => !i.done);
     pending.forEach((i) => reasons.push(t('bl_checklist', { x: checklistLabel(i.step, i.idx) })));
     if (nurse.currentStep === STEP_REQUIRES_NO_MISSING_DOCS) {
-      const miss = nurse.documents.filter((d) => d.status === 'missing');
+      const miss = nurse.documents.filter((d) => d.status === 'missing' && !d.optional);
       miss.forEach((d) => reasons.push(t('bl_doc_missing', { x: d.name })));
     }
     if (nurse.currentStep === STEP_REQUIRES_ALL_DOCS_APPROVED) {
-      const notOk = nurse.documents.filter((d) => d.status !== 'approved');
+      const notOk = nurse.documents.filter((d) => d.status !== 'approved' && !d.optional);
       notOk.forEach((d) => reasons.push(t('bl_doc_approve', { x: d.name })));
     }
     return reasons;
@@ -446,7 +477,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
 
   function computeKpis() {
     const active = state.nurses.filter((n) => n.currentStep < 11).length;
-    const missing = state.nurses.filter((n) => n.documents.some((d) => d.status === 'missing')).length;
+    const missing = state.nurses.filter((n) => n.documents.some((d) => d.status === 'missing' && !d.optional)).length;
     // Pending OPI: cases that obtained the visa or are at the OPI-registration step.
     const opi = state.nurses.filter((n) => n.currentStep === 8 || n.currentStep === 9).length;
     const completed = state.nurses.filter((n) => n.currentStep >= 11).length;
@@ -615,14 +646,14 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     // Driven by the configurable document types managed in Settings.
     const types = (state && state.settings && state.settings.docTypes) || [];
     if (types.length) {
-      return types.map((dt) => ({ id: uid(), name: dt.name, language: dt.language || 'ES', uploadDate: null, validity: null, status: 'missing' }));
+      return types.map((dt) => ({ id: uid(), name: dt.name, language: dt.language || 'ES', uploadDate: null, validity: null, status: 'missing', optional: !!dt.optional }));
     }
     return [
       { id: uid(), name: 'Diploma di Laurea in Infermieristica', language: 'ES', uploadDate: null, validity: null, status: 'missing' },
       { id: uid(), name: 'Certificato Professionale (Exatec)', language: 'ES', uploadDate: null, validity: null, status: 'missing' },
       { id: uid(), name: 'Traduzione Asseverata del Titolo', language: 'IT', uploadDate: null, validity: null, status: 'missing' },
       { id: uid(), name: 'Legalizzazione (Apostille de La Haya)', language: 'IT', uploadDate: null, validity: null, status: 'missing' },
-    ];
+    ].concat(PERSONAL_DOC_TYPES.map((d) => ({ id: uid(), name: d.name, language: d.language, uploadDate: null, validity: null, status: 'missing', optional: !!d.optional })));
   }
 
   function modalShell(inner, wide) {
@@ -639,10 +670,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
   function closeModal() { const m = document.getElementById('modal-layer'); if (m) m.remove(); }
   function fieldVal(id) { const e = document.getElementById(id); return e ? e.value.trim() : ''; }
-  function inputField(id, label, ph, required) {
+  function inputField(id, label, ph, required, type) {
     return '<div>' +
       '<label class="mb-1 block text-xs font-semibold text-slate-500">' + label + (required ? ' <span class="text-rose-500">*</span>' : '') + '</label>' +
-      '<input id="' + id + '" type="text" placeholder="' + escapeHtml(ph) + '" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
+      '<input id="' + id + '" type="' + (type || 'text') + '" placeholder="' + escapeHtml(ph) + '" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />' +
     '</div>';
   }
 
@@ -659,11 +690,27 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       '<div class="grid gap-3 p-5 sm:grid-cols-2">' +
         inputField('nn-name', t('nn_name'), 'Ana Valeria Rosario', true) +
         inputField('nn-passport', t('nn_passport'), 'RD-XX0000000', true) +
+        inputField('nn-cedula', t('nn_cedula'), '001-0000000-0') +
+        inputField('nn-birthdate', t('nn_birthdate'), '', false, 'date') +
+        inputField('nn-birthplace', t('nn_birthplace'), 'Santo Domingo') +
+        inputField('nn-nationality', t('nn_nationality'), t('nn_default_nationality')) +
+        selectField('nn-marital', t('nn_marital'), [
+          { value: 'single', labelKey: 'ms_single' }, { value: 'married', labelKey: 'ms_married' },
+          { value: 'divorced', labelKey: 'ms_divorced' }, { value: 'widowed', labelKey: 'ms_widowed' },
+          { value: 'other', labelKey: 'ms_other' },
+        ], e ? (e.maritalStatus || '') : '') +
+        inputField('nn-phone', t('nn_phone'), '+1 809 000 0000', false, 'tel') +
+        inputField('nn-email', t('nn_email'), 'nome@example.com', false, 'email') +
         inputField('nn-origin', t('nn_origin'), 'Santo Domingo') +
+        '<div class="sm:col-span-2">' + inputField('nn-address', t('nn_address'), 'Calle, numero, città, provincia') + '</div>' +
         selectField('nn-agency', t('nn_agency'), agencyOptions(), e ? e.partnerAgency : '') +
         inputField('nn-lang', t('nn_lang'), 'A2') +
         selectField('nn-employer', t('nn_employer'), employerOptions(), e ? e.employer : '') +
-        '<div class="sm:col-span-2">' + selectField('nn-hr', t('nn_hr'), operatorOptions(), e ? e.hrReferent : '') + '</div>' +
+        selectField('nn-hr', t('nn_hr'), operatorOptions(), e ? e.hrReferent : '') +
+        '<label class="sm:col-span-2 flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">' +
+          '<input id="nn-privacy" type="checkbox"' + (e && e.privacyConsent ? ' checked' : '') + ' class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-200" />' +
+          '<span class="text-xs leading-relaxed text-slate-600"><b>' + t('nn_privacy') + '</b><br>' + t('nn_privacy_hint') + '</span>' +
+        '</label>' +
       '</div>' +
       '<div class="flex items-center justify-between gap-2 border-t border-slate-100 p-5">' +
         (e && isAdmin() ? '<button data-action="delete-nurse" data-id="' + e.id + '" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"><i data-lucide="trash-2" class="h-4 w-4"></i>' + t('del_candidate') + '</button>' : '<span></span>') +
@@ -676,6 +723,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (e) {
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
       set('nn-name', e.name); set('nn-passport', e.passport); set('nn-origin', e.origin); set('nn-lang', e.languageLevel);
+      set('nn-cedula', e.cedula); set('nn-birthdate', e.birthDate); set('nn-birthplace', e.birthPlace);
+      set('nn-nationality', e.nationality); set('nn-phone', e.phone); set('nn-email', e.email); set('nn-address', e.address);
     }
     const el = document.getElementById('nn-name'); if (el) el.focus();
   }
@@ -687,6 +736,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       if (err) { err.textContent = t('nn_error'); err.classList.remove('hidden'); }
       return;
     }
+    const privacyEl = document.getElementById('nn-privacy');
+    const privacyChecked = !!(privacyEl && privacyEl.checked);
     if (editNurseId) {
       // Edit mode: update only the anagrafica fields, keep documents/checklist/state.
       const e = getNurse(editNurseId);
@@ -697,6 +748,18 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         e.languageLevel = fieldVal('nn-lang') || e.languageLevel;
         e.employer = fieldVal('nn-employer') || t('nn_default_employer');
         e.hrReferent = fieldVal('nn-hr') || '—';
+        e.cedula = fieldVal('nn-cedula');
+        e.birthDate = fieldVal('nn-birthdate');
+        e.birthPlace = fieldVal('nn-birthplace');
+        e.nationality = fieldVal('nn-nationality');
+        e.maritalStatus = fieldVal('nn-marital');
+        e.phone = fieldVal('nn-phone');
+        e.email = fieldVal('nn-email');
+        e.address = fieldVal('nn-address');
+        // Privacy consent: stamp the date the first time it's granted, clear it if revoked.
+        if (privacyChecked && !e.privacyConsent) e.privacyConsentDate = new Date().toISOString().slice(0, 10);
+        if (!privacyChecked) e.privacyConsentDate = null;
+        e.privacyConsent = privacyChecked;
         e.lastUpdate = new Date().toISOString().slice(0, 10);
       }
       editNurseId = null;
@@ -711,6 +774,16 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       languageLevel: fieldVal('nn-lang') || t('nn_default_lang'),
       employer: fieldVal('nn-employer') || t('nn_default_employer'),
       hrReferent: fieldVal('nn-hr') || '—',
+      cedula: fieldVal('nn-cedula'),
+      birthDate: fieldVal('nn-birthdate'),
+      birthPlace: fieldVal('nn-birthplace'),
+      nationality: fieldVal('nn-nationality') || t('nn_default_nationality'),
+      maritalStatus: fieldVal('nn-marital'),
+      phone: fieldVal('nn-phone'),
+      email: fieldVal('nn-email'),
+      address: fieldVal('nn-address'),
+      privacyConsent: privacyChecked,
+      privacyConsentDate: privacyChecked ? new Date().toISOString().slice(0, 10) : null,
       currentStep: 1, status: 'In Progress',
       lastUpdate: new Date().toISOString().slice(0, 10),
       documents: defaultRequiredDocs(),
@@ -2372,11 +2445,24 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       '</div>' +
       '<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">' +
         field('book-user', t('f_passport'), n.passport) +
+        field('credit-card', t('f_cedula'), n.cedula || '—') +
+        field('cake', t('f_birth'), [n.birthDate ? formatDate(n.birthDate) : '', n.birthPlace || ''].filter(Boolean).join(' · ') || '—') +
+        field('globe', t('f_nationality'), n.nationality || '—') +
+        field('heart', t('f_marital'), n.maritalStatus ? t('ms_' + n.maritalStatus) : '—') +
+        field('map-pin', t('f_address'), n.address || '—') +
+        field('phone', t('f_phone'), n.phone || '—') +
+        field('mail', t('f_email'), n.email || '—') +
         field('handshake', t('f_agency'), n.partnerAgency) +
         field('languages', t('f_lang'), n.languageLevel) +
         field('hospital', t('f_employer'), n.employer) +
         field('user-cog', t('f_hr'), n.hrReferent) +
         field('flag', t('f_status'), t('step_state', { n: n.currentStep, name: stepName(n.currentStep) })) +
+        '<div class="flex items-start gap-2">' +
+          '<i data-lucide="shield-check" class="mt-0.5 h-4 w-4 shrink-0 ' + (n.privacyConsent ? 'text-emerald-500' : 'text-rose-400') + '"></i>' +
+          '<div><p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + t('f_privacy') + '</p>' +
+          '<p class="text-sm font-medium ' + (n.privacyConsent ? 'text-emerald-600' : 'text-rose-500') + '">' +
+            (n.privacyConsent ? escapeHtml(t('privacy_given', { d: formatDate(n.privacyConsentDate) })) : escapeHtml(t('privacy_none'))) + '</p></div>' +
+        '</div>' +
       '</div>' +
     '</div>';
   }
@@ -2465,7 +2551,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             (d.fileTooBig ? ' <span class="text-amber-500">(' + escapeHtml(t('file_too_big')) + ')</span>' : '') + '</p>'
         : '';
       return '<tr class="border-b border-slate-100 last:border-0">' +
-        '<td class="py-3 pr-2"><p class="text-sm font-medium text-slate-800">' + escapeHtml(d.name) + '</p>' +
+        '<td class="py-3 pr-2"><p class="text-sm font-medium text-slate-800">' + escapeHtml(d.name) +
+          (d.optional ? ' <span class="ml-1 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">' + escapeHtml(t('doc_optional')) + '</span>' : '') + '</p>' +
           '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) + '</p>' + fileLine + '</td>' +
         '<td class="px-2 py-3"><span class="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">' + escapeHtml(d.language) + '</span></td>' +
         '<td class="px-2 py-3 text-xs text-slate-500">' + formatDate(d.uploadDate) + '</td>' +
