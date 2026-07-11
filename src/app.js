@@ -335,6 +335,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     { name: 'Cédula (Documento d’Identità RD)', language: 'ES' },
     { name: 'Fotografia (formato tessera)', language: 'ES' },
     { name: 'Curriculum Vitae', language: 'ES' },
+    { name: 'Consenso Privacy Firmato', language: 'IT' },
     { name: 'Certificato di Lingua', language: 'IT', optional: true },
     { name: 'Certificato Penale', language: 'ES', optional: true },
     { name: 'Certificato Sanitario', language: 'ES', optional: true },
@@ -598,6 +599,12 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       console.warn('Upload fallito:', err && err.message);
     }
     pushLog(n, 'note', t('log_author_system'), t('log_doc_uploaded', { x: d.name }));
+    // Uploading the signed privacy form marks the consent as acquired on the record.
+    if ((d.name || '').toLowerCase().indexOf('consenso privacy') >= 0 && !n.privacyConsent) {
+      n.privacyConsent = true;
+      n.privacyConsentDate = new Date().toISOString().slice(0, 10);
+      pushLog(n, 'system', t('log_author_system'), t('log_privacy_acquired'));
+    }
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
@@ -1250,7 +1257,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
   // Only one document overlay at a time (the print CSS relies on this).
   function openDocOverlay(id, html) {
-    closeManual(); closeGuide();
+    closeManual(); closeGuide(); closePrivacyForm();
     const o = document.createElement('div');
     o.id = id;
     o.className = 'fixed inset-0 z-[80] overflow-y-auto bg-slate-100';
@@ -1273,6 +1280,75 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // ---------- Regulatory guide (content in src/guide-content.js) ----------
   function openGuide() { openDocOverlay('guide-overlay', guideHtml()); }
   function closeGuide() { closeDocOverlay('guide-overlay'); }
+
+  // ---------- Printable privacy-consent form (bilingual IT/ES, prefilled) ----------
+  function openPrivacyForm(nurseId) {
+    const n = getNurse(nurseId); if (!n) return;
+    openDocOverlay('privacy-overlay', privacyFormHtml(n));
+  }
+  function closePrivacyForm() { closeDocOverlay('privacy-overlay'); }
+
+  function privacyFormHtml(n) {
+    const dot = '<span class="text-slate-400">____________________________</span>';
+    const v = (x) => x ? escapeHtml(x) : dot;
+    const birth = [n.birthDate ? formatDate(n.birthDate) : '', n.birthPlace || ''].filter(Boolean).join(' · ');
+    // Each clause: Italian text + Spanish translation underneath (the form itself is not
+    // driven by the UI language: it is a legal document for an Italian data controller
+    // and a Spanish-speaking candidate).
+    const clause = (it, es) =>
+      '<div class="space-y-0.5"><p class="text-[13px] leading-relaxed text-slate-800">' + it + '</p>' +
+      '<p class="text-[12px] italic leading-relaxed text-slate-500">' + es + '</p></div>';
+    const box = '<span class="mr-1.5 inline-block h-3.5 w-3.5 translate-y-0.5 rounded-sm border-2 border-slate-500"></span>';
+    return '' +
+    '<div class="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">' +
+      '<div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3 sm:px-5">' +
+        '<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow"><i data-lucide="shield-check" class="h-4 w-4"></i></div>' +
+        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('privacy_form_title') + '</h1><p class="text-xs text-slate-500">' + escapeHtml(n.name) + '</p></div>' +
+        '<div class="ml-auto flex items-center gap-2">' +
+          '<button onclick="window.print()" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="printer" class="h-3.5 w-3.5"></i>' + t('manual_btn_print') + '</button>' +
+          '<button data-action="close-privacy" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="x" class="h-3.5 w-3.5"></i>' + t('manual_close') + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mx-auto max-w-3xl px-4 py-8 sm:px-5">' +
+      '<div class="space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:p-0 print:shadow-none">' +
+        '<div class="text-center">' +
+          '<h2 class="text-lg font-extrabold text-slate-900">Informativa e Consenso al Trattamento dei Dati Personali</h2>' +
+          '<p class="text-sm italic text-slate-500">Información y Consentimiento para el Tratamiento de Datos Personales</p>' +
+          '<p class="mt-1 text-xs text-slate-400">Artt. 13–14 Regolamento (UE) 2016/679 «GDPR»</p>' +
+        '</div>' +
+        '<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-[13px] leading-relaxed text-slate-700 print:bg-white">' +
+          '<p><b>Candidato/a · Candidato/a:</b> ' + v(n.name) + '</p>' +
+          '<p><b>Nato/a il / a · Nacido/a el / en:</b> ' + (birth ? escapeHtml(birth) : dot) + '</p>' +
+          '<p><b>Cédula:</b> ' + v(n.cedula) + ' &nbsp;·&nbsp; <b>Passaporto · Pasaporte:</b> ' + v(n.passport) + '</p>' +
+          '<p><b>Indirizzo · Dirección:</b> ' + v(n.address) + '</p>' +
+        '</div>' +
+        clause('<b>1. Titolare del trattamento.</b> DominicaHealthLink — Gestionale Trasferimento Infermieri (integrare con ragione sociale, sede e contatti del Titolare).',
+               '<b>1. Responsable del tratamiento.</b> DominicaHealthLink — Gestión de Traslado de Enfermeros (completar con razón social, sede y contactos del Responsable).') +
+        clause('<b>2. Finalità.</b> I dati sono trattati per la gestione della candidatura e della pratica di trasferimento in Italia: riconoscimento del titolo professionale, nulla osta al lavoro, visto d’ingresso, permesso di soggiorno, iscrizione OPI e inserimento presso la struttura sanitaria di destinazione.',
+               '<b>2. Finalidad.</b> Los datos se tratan para la gestión de la candidatura y del expediente de traslado a Italia: reconocimiento del título profesional, autorización de trabajo, visado de entrada, permiso de residencia, inscripción OPI e incorporación a la estructura sanitaria de destino.') +
+        clause('<b>3. Categorie di dati.</b> Dati anagrafici e di contatto, documenti d’identità, titoli di studio e professionali, curriculum; ove richiesto dalla normativa: certificati penali e certificati sanitari (categorie particolari ex artt. 9–10 GDPR).',
+               '<b>3. Categorías de datos.</b> Datos personales y de contacto, documentos de identidad, títulos académicos y profesionales, currículum; cuando lo exija la normativa: certificados penales y sanitarios (categorías especiales según arts. 9–10 RGPD).') +
+        clause('<b>4. Base giuridica e conservazione.</b> Esecuzione di misure precontrattuali e contrattuali, obblighi di legge e consenso esplicito per le categorie particolari. I dati sono conservati per la durata della pratica e per i termini di legge successivi.',
+               '<b>4. Base jurídica y conservación.</b> Ejecución de medidas precontractuales y contractuales, obligaciones legales y consentimiento explícito para las categorías especiales. Los datos se conservan mientras dure el expediente y por los plazos legales posteriores.') +
+        clause('<b>5. Destinatari.</b> I dati possono essere comunicati, per le finalità indicate, a: Ministero della Salute, Sportello Unico per l’Immigrazione, rappresentanze consolari italiane, agenzia partner e struttura sanitaria di destinazione.',
+               '<b>5. Destinatarios.</b> Los datos podrán comunicarse, para las finalidades indicadas, a: Ministerio de Salud italiano, Ventanilla Única de Inmigración, representaciones consulares italianas, agencia asociada y estructura sanitaria de destino.') +
+        clause('<b>6. Diritti dell’interessato.</b> L’interessato può esercitare i diritti di cui agli artt. 15–22 GDPR (accesso, rettifica, cancellazione, limitazione, portabilità, opposizione) e revocare il consenso in qualsiasi momento, scrivendo al Titolare.',
+               '<b>6. Derechos del interesado.</b> El interesado puede ejercer los derechos de los arts. 15–22 RGPD (acceso, rectificación, supresión, limitación, portabilidad, oposición) y revocar el consentimiento en cualquier momento, escribiendo al Responsable.') +
+        '<div class="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 print:bg-white">' +
+          clause('<b>Consenso al trattamento dei dati personali</b> per le finalità di cui al punto 2:<br>' + box + 'Acconsento&nbsp;&nbsp;&nbsp;' + box + 'Non acconsento',
+                 '<b>Consentimiento al tratamiento de los datos personales</b> para las finalidades del punto 2:<br>' + box + 'Consiento&nbsp;&nbsp;&nbsp;' + box + 'No consiento') +
+          clause('<b>Consenso esplicito al trattamento delle categorie particolari di dati</b> (certificati sanitari e penali, solo ove richiesti):<br>' + box + 'Acconsento&nbsp;&nbsp;&nbsp;' + box + 'Non acconsento',
+                 '<b>Consentimiento explícito al tratamiento de las categorías especiales de datos</b> (certificados sanitarios y penales, solo cuando se requieran):<br>' + box + 'Consiento&nbsp;&nbsp;&nbsp;' + box + 'No consiento') +
+        '</div>' +
+        '<div class="grid grid-cols-2 gap-8 pt-6 text-[13px] text-slate-700">' +
+          '<div><p class="mb-8">Luogo e data · Lugar y fecha</p><p class="border-t border-slate-400 pt-1 text-center text-xs text-slate-400">&nbsp;</p></div>' +
+          '<div><p class="mb-8">Firma del candidato · Firma del candidato</p><p class="border-t border-slate-400 pt-1 text-center text-xs text-slate-400">&nbsp;</p></div>' +
+        '</div>' +
+        '<p class="no-print rounded-xl bg-amber-50 p-3 text-xs text-amber-700 ring-1 ring-inset ring-amber-200">' + t('privacy_form_hint') + '</p>' +
+      '</div>' +
+    '</div>';
+  }
 
   function guideHtml() {
     const toc = guideToc(LANG).map((item) => '<a href="#' + item[0] + '" class="toc-link block rounded-lg px-3 py-1.5 text-slate-600 transition hover:bg-slate-50">' + item[1] + '</a>').join('');
@@ -2461,7 +2537,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '<i data-lucide="shield-check" class="mt-0.5 h-4 w-4 shrink-0 ' + (n.privacyConsent ? 'text-emerald-500' : 'text-rose-400') + '"></i>' +
           '<div><p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + t('f_privacy') + '</p>' +
           '<p class="text-sm font-medium ' + (n.privacyConsent ? 'text-emerald-600' : 'text-rose-500') + '">' +
-            (n.privacyConsent ? escapeHtml(t('privacy_given', { d: formatDate(n.privacyConsentDate) })) : escapeHtml(t('privacy_none'))) + '</p></div>' +
+            (n.privacyConsent ? escapeHtml(t('privacy_given', { d: formatDate(n.privacyConsentDate) })) : escapeHtml(t('privacy_none'))) + '</p>' +
+          '<button data-action="print-privacy" data-id="' + n.id + '" class="mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50"><i data-lucide="printer" class="h-3 w-3"></i>' + t('privacy_print') + '</button></div>' +
         '</div>' +
       '</div>' +
       personalDocsStrip(n) +
@@ -2568,11 +2645,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       const cls = DOC_STATUS_CLS[d.status], icon = DOC_STATUS_ICON[d.status];
       const uploadBtn = '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
       const actions = d.status === 'approved'
-        ? '<div class="flex gap-1.5">' + uploadBtn +
+        ? '<div class="flex flex-wrap justify-end gap-1.5">' + uploadBtn +
             '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button></div>'
         : d.status === 'missing'
           ? uploadBtn
-          : '<div class="flex gap-1.5">' + uploadBtn +
+          : '<div class="flex flex-wrap justify-end gap-1.5">' + uploadBtn +
               '<button data-action="approve-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-50">' + t('act_approve') + '</button>' +
               '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button>' +
             '</div>';
@@ -2583,10 +2660,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         : '';
       return '<tr class="border-b border-slate-100 last:border-0">' +
         '<td class="py-3 pr-2"><p class="text-sm font-medium text-slate-800">' + escapeHtml(d.name) +
+          ' <span class="ml-0.5 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-slate-400">' + escapeHtml(d.language) + '</span>' +
           (d.optional ? ' <span class="ml-1 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">' + escapeHtml(t('doc_optional')) + '</span>' : '') + '</p>' +
-          '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) + '</p>' + fileLine + '</td>' +
-        '<td class="px-2 py-3"><span class="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">' + escapeHtml(d.language) + '</span></td>' +
-        '<td class="px-2 py-3 text-xs text-slate-500">' + formatDate(d.uploadDate) + '</td>' +
+          '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) +
+            (d.uploadDate ? ' · ' + t('th_uploaded') + ': ' + formatDate(d.uploadDate) : '') + '</p>' + fileLine + '</td>' +
         '<td class="px-2 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' + cls + '"><i data-lucide="' + icon + '" class="h-3 w-3"></i>' + docStatusLabel(d.status) + '</span></td>' +
         '<td class="py-3 pl-2 text-right">' + actions + '</td>' +
       '</tr>';
@@ -2602,9 +2679,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '<button data-action="open-add-doc" data-nurse="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="plus" class="h-3 w-3"></i>' + t('add') + '</button>' +
       '</div>' +
       '<div class="-mx-5 overflow-x-auto px-5">' +
-        '<table class="w-full min-w-[560px]">' +
+        '<table class="w-full min-w-[340px]">' +
           '<thead><tr class="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">' +
-            '<th class="pb-2 pr-2">' + t('th_document') + '</th><th class="px-2 pb-2">' + t('th_lang') + '</th><th class="px-2 pb-2">' + t('th_uploaded') + '</th><th class="px-2 pb-2">' + t('th_status') + '</th><th class="pb-2 pl-2 text-right">' + t('th_actions') + '</th>' +
+            '<th class="pb-2 pr-2">' + t('th_document') + '</th><th class="px-2 pb-2">' + t('th_status') + '</th><th class="pb-2 pl-2 text-right">' + t('th_actions') + '</th>' +
           '</tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>' +
@@ -3024,6 +3101,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'close-manual': closeManual(); break;
       case 'open-guide': openGuide(); break;
       case 'close-guide': closeGuide(); break;
+      case 'print-privacy': openPrivacyForm(t.getAttribute('data-id')); break;
+      case 'close-privacy': closePrivacyForm(); break;
       case 'set-lang': setLang(t.getAttribute('data-lang')); break;
       case 'toggle-theme': toggleTheme(); break;
       case 'show-risk': state.statusFilter = 'risk'; state.view = 'cases'; commit(); break;
@@ -3041,6 +3120,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('modal-layer')) closeModal();
+    else if (document.getElementById('privacy-overlay')) closePrivacyForm();
     else if (document.getElementById('guide-overlay')) closeGuide();
     else if (document.getElementById('manual-overlay')) closeManual();
     else if (tour.active) endTour(true);

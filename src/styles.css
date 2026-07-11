@@ -60,10 +60,12 @@
     #guide-overlay h2[id], #guide-overlay section[id], #guide-overlay li[id] { scroll-margin-top: 80px; }
     #manual-overlay .toc-link.active, #guide-overlay .toc-link.active { color: #4f46e5; font-weight: 600; background: #eef2ff; }
     @media print {
-      body > *:not(#manual-overlay):not(#guide-overlay) { display: none !important; }
-      #manual-overlay, #guide-overlay { position: static !important; overflow: visible !important; background: #fff !important; }
-      #manual-overlay .no-print, #guide-overlay .no-print { display: none !important; }
+      body > *:not(#manual-overlay):not(#guide-overlay):not(#privacy-overlay) { display: none !important; }
+      #manual-overlay, #guide-overlay, #privacy-overlay { position: static !important; overflow: visible !important; background: #fff !important; }
+      #manual-overlay .no-print, #guide-overlay .no-print, #privacy-overlay .no-print { display: none !important; }
       #manual-overlay aside, #guide-overlay aside { display: none !important; }
+      /* The privacy form is signed on paper: always print it in light colors. */
+      #privacy-overlay, #privacy-overlay * { color: #0f172a !important; background: #fff !important; }
     }
 
     /* ===== Dark mode: remap the slate/white palette used across the app ===== */
@@ -92,7 +94,7 @@
     .dark .to-slate-50 { --tw-gradient-to: #1e293b var(--tw-gradient-to-position) !important; }
     .dark input, .dark textarea, .dark select { background-color: #0f172a !important; border-color: #334155 !important; color: #e2e8f0 !important; }
     .dark input::placeholder, .dark textarea::placeholder { color: #64748b !important; }
-    .dark #manual-overlay, .dark #guide-overlay { background-color: #0b1220 !important; }
+    .dark #manual-overlay, .dark #guide-overlay, .dark #privacy-overlay { background-color: #0b1220 !important; }
     .dark #tour-card, .dark #modal-layer > div { background-color: #1e293b !important; color: #cbd5e1; }
     .dark code { background-color: #334155 !important; }
 
@@ -100,4 +102,4 @@
     /* Requires viewport-fit=cover in the <meta name="viewport"> tag. */
     header.sticky { padding-top: env(safe-area-inset-top); }
     body { padding-bottom: env(safe-area-inset-bottom); }
-    #manual-overlay, #guide-overlay, #modal-layer { padding-top: env(safe-area-inset-top); }
+    #manual-overlay, #guide-overlay, #privacy-overlay, #modal-layer { padding-top: env(safe-area-inset-top); }
