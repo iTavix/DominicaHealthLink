@@ -28,6 +28,16 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 11 lug 2026 (sera) — PROTOCOLLO MATCHING 2.0 (non ancora deployato)
+
+Da «struttura progetto 2.0 2.md» (protocollo operativo di matching tecnico):
+- **Specializzazioni cliniche strutturate** sul candidato (`nurse.specializations`, catalogo configurabile in Impostazioni → Specializzazioni, default 10 voci in `DEFAULT_SPECIALTIES`). Si spuntano come chips in Modifica anagrafica; visibili nella scheda Competenze e nel CSV.
+- **Documento «Dossier Italia in tasca»** aggiunto ai doc personali (facoltativo: non blocca la pipeline, ma il matching lo verifica).
+- **Richieste delle strutture** (`state.requests`, sincronizzate nel doc Firestore `cases` insieme ai nurses — le regole attuali le accettano già, NIENTE da ripubblicare): struttura, reparto, turno, competenze minime, preferenziali, note; stati aperta/abbinata/chiusa.
+- **Vista Matching** (nuova scheda di navigazione): elenco richieste, «Nuova Richiesta», «Trova candidati» = rosa ordinata per compatibilità (idoneo se ha TUTTE le competenze minime; punteggio con preferenziali, dossier validato, documenti completi, fase), badge di validazione, «Abbina» aggiorna datore di lavoro del candidato + log su entrambi; Rimuovi abbinamento / Chiudi / Riapri / Elimina.
+- **Ruoli operativi per team** (`canOperatePhase`, `canManageMatching`): operatore con team assegnato lavora SOLO le fasi del suo team (checklist disabilitate + avviso azzurro + Avanza Fase bloccato sulle fasi altrui); il matching (richieste e abbinamenti) è del Team Italia. Admin e operatori SENZA team = accesso pieno (retrocompatibile). Solo UI, non regole Firestore.
+- Manuale aggiornato (nav + sezione 6.1 «protocollo di matching tecnico») in IT/EN/ES. Testato in demo locale su :4610 con entrambi i team simulati (`dhl.operator.name` + demoRole operator). ApiKey ripristinata, build ok.
+
 ### Sessione 11 lug 2026 (pomeriggio) — NUOVA STRUTTURA A 9 FASI (non ancora deployata)
 
 Implementata la struttura di «struttura progetto.md»: il workflow è passato da **11 stati a 9 fasi divise in 2 team**:
