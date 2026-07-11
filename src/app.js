@@ -358,7 +358,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     return normalizeState(seedState());
   }
   // Backfill fields added in later versions so older saved states keep working.
-  const PERSONAL_FIELDS = ['cedula', 'birthDate', 'birthPlace', 'nationality', 'maritalStatus', 'phone', 'email', 'address'];
+  const PERSONAL_FIELDS = ['cedula', 'birthDate', 'birthPlace', 'nationality', 'maritalStatus', 'phone', 'email', 'address', 'passportExpiry', 'cedulaExpiry', 'profRole', 'profSector', 'profExperience'];
   function normalizeState(s) {
     if (!s.settings) s.settings = defaultSettings();
     ['agencies', 'employers', 'operators', 'docTypes'].forEach((k) => { if (!Array.isArray(s.settings[k])) s.settings[k] = []; });
@@ -546,6 +546,24 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
+  // "Elimina" on an approved document: removes the uploaded file and frees the slot.
+  function deleteDocFile(nurseId, docId) {
+    const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    d.status = 'missing'; d.uploadDate = null;
+    d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileTooBig = false;
+    pushLog(n, 'alert', t('log_author_system'), t('log_doc_deleted', { x: d.name }));
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+  // Instant status change from the dropdown in the documents table (keeps the file).
+  function setDocStatus(nurseId, docId, status) {
+    const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d || d.status === status) return;
+    if (status === 'approved') { approveDoc(nurseId, docId); return; }
+    d.status = status;
+    pushLog(n, 'system', t('log_author_system'), t('log_doc_status', { x: d.name, s: docStatusLabel(status) }));
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
   function rejectDoc(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
     d.status = 'missing'; d.uploadDate = null;
@@ -591,8 +609,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     d.fileSize = file.size;
     d.uploadDate = new Date().toISOString().slice(0, 10);
     d.status = 'pending';
-    d.fileUrl = null; d.fileStoragePath = null;
+    d.fileUrl = null; d.fileStoragePath = null; d.fileTooBig = false;
 
+    let cloudErr = null;
     try {
       if (fbEnabled && storage && currentUser) {
         // Upload the real bytes to Firebase Storage; keep only the download URL in the DB.
@@ -602,15 +621,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         const snap = await ref.put(file);
         d.fileUrl = await snap.ref.getDownloadURL();
         d.fileStoragePath = path;
-      } else if (file.size <= 900 * 1024) {
-        // No cloud storage (demo/offline): embed small files as a data URL so they're viewable.
-        d.fileUrl = await readAsDataURL(file);
-      } else {
-        // Too large to embed without Storage — keep the metadata, flag it.
-        d.fileTooBig = true;
       }
     } catch (err) {
-      console.warn('Upload fallito:', err && err.message);
+      cloudErr = err;
+      console.warn('Upload su Storage fallito:', err && err.message);
+    }
+    // Cloud unavailable (Storage disabled / rules) or demo mode: keep the file viewable
+    // anyway by embedding small files as a data URL.
+    if (!d.fileUrl) {
+      if (file.size <= 900 * 1024) {
+        try { d.fileUrl = await readAsDataURL(file); } catch (e2) { /* ignore */ }
+      } else {
+        d.fileTooBig = true;
+      }
+      if (cloudErr) pushLog(n, 'alert', t('log_author_system'), t('log_upload_cloud_failed', { x: d.name }));
     }
     pushLog(n, 'note', t('log_author_system'), t('log_doc_uploaded', { x: d.name }));
     // Uploading the signed privacy form marks the consent as acquired on the record.
@@ -711,7 +735,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       '<div class="grid gap-3 p-5 sm:grid-cols-2">' +
         inputField('nn-name', t('nn_name'), 'Ana Valeria Rosario', true) +
         inputField('nn-passport', t('nn_passport'), 'RD-XX0000000', true) +
+        inputField('nn-passport-exp', t('nn_passport_exp'), '', false, 'date') +
         inputField('nn-cedula', t('nn_cedula'), '001-0000000-0') +
+        inputField('nn-cedula-exp', t('nn_cedula_exp'), '', false, 'date') +
         inputField('nn-birthdate', t('nn_birthdate'), '', false, 'date') +
         inputField('nn-birthplace', t('nn_birthplace'), 'Santo Domingo') +
         inputField('nn-nationality', t('nn_nationality'), t('nn_default_nationality')) +
@@ -723,6 +749,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         inputField('nn-phone', t('nn_phone'), '+1 809 000 0000', false, 'tel') +
         inputField('nn-email', t('nn_email'), 'nome@example.com', false, 'email') +
         '<div class="sm:col-span-2">' + inputField('nn-address', t('nn_address'), 'Calle, numero, città, provincia') + '</div>' +
+        '<p class="sm:col-span-2 -mb-1 mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">' + t('tab_competenze') + '</p>' +
+        inputField('nn-role', t('f_role'), 'Infermiere/a') +
+        inputField('nn-sector', t('f_sector'), 'Terapia intensiva') +
+        inputField('nn-exp', t('f_experience'), '5 anni') +
         selectField('nn-agency', t('nn_agency'), agencyOptions(), e ? e.partnerAgency : '') +
         inputField('nn-lang', t('nn_lang'), 'A2') +
         selectField('nn-employer', t('nn_employer'), employerOptions(), e ? e.employer : '') +
@@ -744,6 +774,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
       set('nn-name', e.name); set('nn-passport', e.passport); set('nn-lang', e.languageLevel);
       set('nn-cedula', e.cedula); set('nn-birthdate', e.birthDate); set('nn-birthplace', e.birthPlace);
+      set('nn-passport-exp', e.passportExpiry); set('nn-cedula-exp', e.cedulaExpiry);
+      set('nn-role', e.profRole); set('nn-sector', e.profSector); set('nn-exp', e.profExperience);
       set('nn-nationality', e.nationality); set('nn-phone', e.phone); set('nn-email', e.email); set('nn-address', e.address);
     }
     const el = document.getElementById('nn-name'); if (el) el.focus();
@@ -768,6 +800,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         e.employer = fieldVal('nn-employer') || t('nn_default_employer');
         e.hrReferent = fieldVal('nn-hr') || '—';
         e.cedula = fieldVal('nn-cedula');
+        e.passportExpiry = fieldVal('nn-passport-exp');
+        e.cedulaExpiry = fieldVal('nn-cedula-exp');
+        e.profRole = fieldVal('nn-role');
+        e.profSector = fieldVal('nn-sector');
+        e.profExperience = fieldVal('nn-exp');
         e.birthDate = fieldVal('nn-birthdate');
         e.birthPlace = fieldVal('nn-birthplace');
         e.nationality = fieldVal('nn-nationality');
@@ -793,6 +830,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       employer: fieldVal('nn-employer') || t('nn_default_employer'),
       hrReferent: fieldVal('nn-hr') || '—',
       cedula: fieldVal('nn-cedula'),
+      passportExpiry: fieldVal('nn-passport-exp'),
+      cedulaExpiry: fieldVal('nn-cedula-exp'),
+      profRole: fieldVal('nn-role'),
+      profSector: fieldVal('nn-sector'),
+      profExperience: fieldVal('nn-exp'),
       birthDate: fieldVal('nn-birthdate'),
       birthPlace: fieldVal('nn-birthplace'),
       nationality: fieldVal('nn-nationality') || t('nn_default_nationality'),
@@ -2530,19 +2572,63 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '<button data-action="open-edit-nurse" data-id="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-white/70 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-white"><i data-lucide="pencil" class="h-3 w-3"></i>' + t('edit_candidate') + '</button>' +
         '</div>' +
       '</div>' +
-      '<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">' +
-        field('book-user', t('f_passport'), n.passport) +
-        field('credit-card', t('f_cedula'), n.cedula || '—') +
+      profileTabsHtml(n) +
+      personalDocsStrip(n) +
+    '</div>';
+  }
+
+  // Which anagrafica tab is open (kept across renders; not persisted).
+  let profileTab = 'dati';
+
+  function profileTabsHtml(n) {
+    const field = (icon, label, value) =>
+      '<div class="flex items-start gap-2">' +
+        '<i data-lucide="' + icon + '" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"></i>' +
+        '<div><p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
+        '<p class="text-sm font-medium text-slate-700">' + escapeHtml(value) + '</p></div>' +
+      '</div>';
+    // Expiry field with traffic-light coloring (red = expired, amber = within 60 days).
+    const expField = (label, dateStr) => {
+      let cls = 'text-slate-700', icon = 'calendar', iconCls = 'text-slate-400';
+      if (dateStr) {
+        const days = Math.floor((new Date(dateStr) - today()) / 86400000);
+        if (days < 0) { cls = 'text-rose-600'; icon = 'calendar-x'; iconCls = 'text-rose-400'; }
+        else if (days <= 60) { cls = 'text-amber-600'; icon = 'calendar-clock'; iconCls = 'text-amber-500'; }
+      }
+      return '<div class="flex items-start gap-2">' +
+        '<i data-lucide="' + icon + '" class="mt-0.5 h-4 w-4 shrink-0 ' + iconCls + '"></i>' +
+        '<div><p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</p>' +
+        '<p class="text-sm font-medium ' + cls + '">' + (dateStr ? formatDate(dateStr) : '—') + '</p></div>' +
+      '</div>';
+    };
+    const tabBtn = (id, icon, label) =>
+      '<button data-action="profile-tab" data-tab="' + id + '" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ' +
+      (profileTab === id ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800') + '"><i data-lucide="' + icon + '" class="h-3.5 w-3.5"></i>' + label + '</button>';
+
+    let body;
+    if (profileTab === 'contatti') {
+      body =
+        field('phone', t('f_phone'), n.phone || '—') +
+        field('mail', t('f_email'), n.email || '—') +
+        field('handshake', t('f_agency'), n.partnerAgency) +
+        field('hospital', t('f_employer'), n.employer) +
+        field('user-cog', t('f_hr'), n.hrReferent);
+    } else if (profileTab === 'competenze') {
+      body =
+        field('briefcase', t('f_role'), n.profRole || '—') +
+        field('building-2', t('f_sector'), n.profSector || '—') +
+        field('history', t('f_experience'), n.profExperience || '—') +
+        field('languages', t('f_lang'), n.languageLevel);
+    } else {
+      body =
         field('cake', t('f_birth'), [n.birthDate ? formatDate(n.birthDate) : '', n.birthPlace || ''].filter(Boolean).join(' · ') || '—') +
         field('globe', t('f_nationality'), n.nationality || '—') +
         field('heart', t('f_marital'), n.maritalStatus ? t('ms_' + n.maritalStatus) : '—') +
         field('map-pin', t('f_address'), n.address || '—') +
-        field('phone', t('f_phone'), n.phone || '—') +
-        field('mail', t('f_email'), n.email || '—') +
-        field('handshake', t('f_agency'), n.partnerAgency) +
-        field('languages', t('f_lang'), n.languageLevel) +
-        field('hospital', t('f_employer'), n.employer) +
-        field('user-cog', t('f_hr'), n.hrReferent) +
+        field('book-user', t('f_passport'), n.passport) +
+        expField(t('f_passport_exp'), n.passportExpiry) +
+        field('credit-card', t('f_cedula'), n.cedula || '—') +
+        expField(t('f_cedula_exp'), n.cedulaExpiry) +
         field('flag', t('f_status'), t('step_state', { n: n.currentStep, name: stepName(n.currentStep) })) +
         '<div class="flex items-start gap-2">' +
           '<i data-lucide="shield-check" class="mt-0.5 h-4 w-4 shrink-0 ' + (n.privacyConsent ? 'text-emerald-500' : 'text-rose-400') + '"></i>' +
@@ -2550,10 +2636,14 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '<p class="text-sm font-medium ' + (n.privacyConsent ? 'text-emerald-600' : 'text-rose-500') + '">' +
             (n.privacyConsent ? escapeHtml(t('privacy_given', { d: formatDate(n.privacyConsentDate) })) : escapeHtml(t('privacy_none'))) + '</p>' +
           '<button data-action="print-privacy" data-id="' + n.id + '" class="mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50"><i data-lucide="printer" class="h-3 w-3"></i>' + t('privacy_print') + '</button></div>' +
+        '</div>';
+    }
+    return '<div class="px-5 pt-4">' +
+        '<div class="flex w-max max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">' +
+          tabBtn('dati', 'id-card', t('tab_dati')) + tabBtn('contatti', 'phone', t('tab_contatti')) + tabBtn('competenze', 'briefcase', t('tab_competenze')) +
         '</div>' +
       '</div>' +
-      personalDocsStrip(n) +
-    '</div>';
+      '<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">' + body + '</div>';
   }
 
   // Personal documents (passport copy, Cédula, photo, CV, certificates) uploadable
@@ -2655,12 +2745,15 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const rows = n.documents.map((d) => {
       const cls = DOC_STATUS_CLS[d.status], icon = DOC_STATUS_ICON[d.status];
       const uploadBtn = '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
+      const viewBtn = d.fileName
+        ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="eye" class="h-3.5 w-3.5"></i></button>'
+        : '';
       const actions = d.status === 'approved'
-        ? '<div class="flex flex-wrap justify-end gap-1.5">' + uploadBtn +
-            '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button></div>'
+        ? '<div class="flex flex-wrap justify-end gap-1.5">' + viewBtn + uploadBtn +
+            '<button data-action="delete-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"><i data-lucide="trash-2" class="h-3 w-3"></i>' + t('act_delete') + '</button></div>'
         : d.status === 'missing'
           ? uploadBtn
-          : '<div class="flex flex-wrap justify-end gap-1.5">' + uploadBtn +
+          : '<div class="flex flex-wrap justify-end gap-1.5">' + viewBtn + uploadBtn +
               '<button data-action="approve-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-50">' + t('act_approve') + '</button>' +
               '<button data-action="reject-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50">' + t('act_reject') + '</button>' +
             '</div>';
@@ -2675,7 +2768,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           (d.optional ? ' <span class="ml-1 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">' + escapeHtml(t('doc_optional')) + '</span>' : '') + '</p>' +
           '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) +
             (d.uploadDate ? ' · ' + t('th_uploaded') + ': ' + formatDate(d.uploadDate) : '') + '</p>' + fileLine + '</td>' +
-        '<td class="px-2 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' + cls + '"><i data-lucide="' + icon + '" class="h-3 w-3"></i>' + docStatusLabel(d.status) + '</span></td>' +
+        '<td class="px-2 py-3"><select data-action="doc-status" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="cursor-pointer appearance-none rounded-full border-0 px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ' + cls + '">' +
+          ['missing', 'pending', 'approved'].map((sv) => '<option value="' + sv + '"' + (d.status === sv ? ' selected' : '') + '>' + docStatusLabel(sv) + '</option>').join('') + '</select></td>' +
         '<td class="py-3 pl-2 text-right">' + actions + '</td>' +
       '</tr>';
     }).join('');
@@ -3083,6 +3177,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'advance': advanceStatus(t.getAttribute('data-id')); break;
       case 'approve-doc': approveDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
       case 'reject-doc': rejectDoc(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'delete-doc': deleteDocFile(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
+      case 'profile-tab': profileTab = t.getAttribute('data-tab'); render(); break;
       case 'upload-doc': triggerUpload(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
       case 'open-edit-nurse': openNewNurseModal(t.getAttribute('data-id')); break;
       case 'open-relocation': openRelocationModal(t.getAttribute('data-id')); break;
@@ -3138,6 +3234,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   });
 
   document.addEventListener('change', (e) => {
+    const st = e.target.closest('[data-action="doc-status"]');
+    if (st) { setDocStatus(st.getAttribute('data-nurse'), st.getAttribute('data-doc'), st.value); return; }
     const t = e.target.closest('[data-action="toggle-check"]');
     if (t) {
       toggleChecklist(t.getAttribute('data-nurse'), parseInt(t.getAttribute('data-step'), 10), t.getAttribute('data-item'));
