@@ -28,6 +28,13 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 12 lug 2026 (notte, 5ª parte) — Manuale in-app aggiornato a v1.1 (prod+demo, ONLINE)
+
+- Aggiornati i tre corpi del manuale (`manualBodyIT/EN/ES`) + versione header `manualHtml` (v1.0→v1.1), in produzione e demo (patch identica applicata pulita, il manuale era allineato).
+- Aggiunto in §1 un riquadro verde **«Novità di questa versione»** che elenca tutte le aggiunte recenti con rimando alla sezione. Aggiornati inoltre: §3 tabella interfaccia (riga «Stato salvataggio», riga «Ripristina» = solo demo, Guida navigabile con frecce), §4.3 (scadenze passaporto/cédula), §5.1 (ricerca estesa), §6.1 (alert richieste), §7 procedura 1 (validazioni) + «Altre funzioni utili» (Scheda PDF, Backup), nuova §8.1 «Lavoro in team e stato del salvataggio», FAQ (gating documenti, indicatore rosso, Ripristina solo demo).
+- ⚠️ Il manuale è scritto come manuale DEL PRODOTTO: descrive anche sync/cloud/save-chip che nella demo (locale) non si attivano — coerente col fatto che la demo mostra le capacità del gestionale reale.
+- Nulla ancora in sospeso sul manuale.
+
 ### Sessione 12 lug 2026 (notte, 4ª parte) — Frecce guida + footer sticky (prod+demo, ONLINE) + dati matching demo
 
 - **Frecce tastiera nel tour «Guida»** (prod commit b3b8794, demo 30103ae): nel gestore keydown, se `tour.active` e nessuna modale → →/↓ `tourNext()`, ←/↑ `tourPrev()` (con preventDefault). NB: il tasto del tool browser di test non arriva alla pagina; verificato via dispatch reale (start→2× ArrowRight = passo 3, ArrowLeft = passo 2).
