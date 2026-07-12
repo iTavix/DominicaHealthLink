@@ -6,7 +6,6 @@
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
-import 'firebase/compat/storage';
 import { createIcons, icons as lucideIcons } from 'lucide';
 import { STEP_I18N, CHECKLIST_I18N, I18N } from './i18n-data.js';
 import { guideToc, guideBody } from './guide-content.js';
@@ -47,7 +46,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   const ORG_ID = 'default';
 
   // Firebase runtime handles (populated only when configured).
-  let fbEnabled = false, auth = null, db = null, storage = null, currentUser = null, userClaims = null;
+  let fbEnabled = false, auth = null, db = null, currentUser = null, userClaims = null;
   let remoteSaveTimer = null, tourAutoChecked = false;
   // True once onAuthStateChanged has fired at least once. Until then the boot splash stays on
   // screen, so a returning signed-in user never sees the login screen flash by.
@@ -860,10 +859,19 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // Documents that are expired or expiring within 60 days, across all candidates.
   function computeExpiring() {
     const list = [];
-    state.nurses.forEach((n) => (n.documents || []).forEach((d) => {
-      const ex = docExpiry(d);
-      if (ex === 'expired' || ex === 'soon') list.push({ n: n, d: d, ex: ex });
-    }));
+    state.nurses.forEach((n) => {
+      (n.documents || []).forEach((d) => {
+        const ex = docExpiry(d);
+        if (ex === 'expired' || ex === 'soon') list.push({ n: n, d: d, ex: ex });
+      });
+      // Identity expiry dates from the personal-data sheet (passport / cédula): surfaced as
+      // virtual entries so the dashboard panel and KPI alert on them, not just on file validities.
+      [{ k: 'passportExpiry', label: t('f_passport_exp') }, { k: 'cedulaExpiry', label: t('f_cedula_exp') }].forEach((f) => {
+        if (!n[f.k]) return;
+        const ex = docExpiry({ validity: n[f.k] });
+        if (ex === 'expired' || ex === 'soon') list.push({ n: n, d: { name: f.label, validity: n[f.k] }, ex: ex });
+      });
+    });
     list.sort((a, b) => {
       if (a.ex !== b.ex) return a.ex === 'expired' ? -1 : 1;
       return String(a.d.validity).localeCompare(String(b.d.validity));
@@ -893,6 +901,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
 
   function approveDoc(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    if (!canOperatePhase(n.currentStep)) return; // the other team's phase
     d.status = 'approved';
     if (!d.uploadDate) d.uploadDate = new Date().toISOString().slice(0, 10);
     pushLog(n, 'system', actorName(), t('log_doc_approved', { x: d.name }));
@@ -902,6 +911,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // "Elimina" on an approved document: removes the uploaded file and frees the slot.
   function deleteDocFile(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    if (!canOperatePhase(n.currentStep)) return; // the other team's phase
     d.status = 'missing'; d.uploadDate = null;
     deleteStoredFile(d);
     d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null; d.fileTooBig = false;
@@ -912,6 +922,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // Instant status change from the dropdown in the documents table (keeps the file).
   function setDocStatus(nurseId, docId, status) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d || d.status === status) return;
+    if (!canOperatePhase(n.currentStep)) return; // the other team's phase
     if (status === 'approved') { approveDoc(nurseId, docId); return; }
     d.status = status;
     pushLog(n, 'system', actorName(), t('log_doc_status', { x: d.name, s: docStatusLabel(status) }));
@@ -920,6 +931,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
   function rejectDoc(nurseId, docId) {
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
+    if (!canOperatePhase(n.currentStep)) return; // the other team's phase
     d.status = 'missing'; d.uploadDate = null;
     deleteStoredFile(d);
     d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null;
@@ -948,7 +960,13 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const chunks = [];
     for (let i = 0; i < dataUrl.length; i += FILE_CHUNK_SIZE) chunks.push(dataUrl.slice(i, i + FILE_CHUNK_SIZE));
     for (let i = 0; i < chunks.length; i++) {
-      await fileChunkRef(fileId, i).set({ seq: i, of: chunks.length, data: chunks[i], updatedAt: serverTs() });
+      try {
+        await fileChunkRef(fileId, i).set({ seq: i, of: chunks.length, data: chunks[i], updatedAt: serverTs() });
+      } catch (err) {
+        // Partial upload: remove the chunks already written so no orphans eat free-plan space.
+        for (let k = 0; k < i; k++) fileChunkRef(fileId, k).delete().catch(() => { /* best effort */ });
+        throw err;
+      }
     }
     return { id: fileId, chunks: chunks.length };
   }
@@ -991,6 +1009,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // ---------- Real file upload for documents ----------
   let pendingUpload = null;
   function triggerUpload(nurseId, docId) {
+    const gn = getNurse(nurseId);
+    if (gn && !canOperatePhase(gn.currentStep)) return; // the other team's phase
     pendingUpload = { nurseId: nurseId, docId: docId };
     let input = document.getElementById('doc-file-input');
     if (!input) {
@@ -1102,7 +1122,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
 
   function resetData() {
-    if (!isAdmin()) return;
+    // Cloud mode: never allow seeding demo data over the team's real shared caseload.
+    if (!isAdmin() || fbEnabled) return;
     if (!confirm(t('reset_confirm'))) return;
     state = seedState();
     saveState();
@@ -1222,13 +1243,17 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const el = document.getElementById('nn-name'); if (el) el.focus();
   }
 
+  function isValidEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((s || '').trim()); }
+  function formError(id, msg) { const err = document.getElementById(id); if (err) { err.textContent = msg; err.classList.remove('hidden'); } }
   function createNurseFromForm() {
     const name = fieldVal('nn-name'), passport = fieldVal('nn-passport');
-    if (!name || !passport) {
-      const err = document.getElementById('nn-error');
-      if (err) { err.textContent = t('nn_error'); err.classList.remove('hidden'); }
-      return;
-    }
+    if (!name || !passport) { formError('nn-error', t('nn_error')); return; }
+    // A typo'd email is worse than an empty one (it silently breaks contact data).
+    const nnEmail = fieldVal('nn-email');
+    if (nnEmail && !isValidEmail(nnEmail)) { formError('nn-error', t('err_email_invalid')); return; }
+    // The passport number is the de-facto natural key: block silent duplicates.
+    const dupe = state.nurses.find((x) => x.id !== editNurseId && (x.passport || '').trim().toLowerCase() === passport.toLowerCase());
+    if (dupe) { formError('nn-error', t('err_passport_dupe', { x: dupe.name })); return; }
     const privacyEl = document.getElementById('nn-privacy');
     const privacyChecked = !!(privacyEl && privacyEl.checked);
     if (editNurseId) {
@@ -1255,7 +1280,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         e.email = fieldVal('nn-email');
         e.address = fieldVal('nn-address');
         // Privacy consent: stamp the date the first time it's granted, clear it if revoked.
+        // GDPR: a revocation is an auditable event — it must leave a trace in the log.
         if (privacyChecked && !e.privacyConsent) e.privacyConsentDate = new Date().toISOString().slice(0, 10);
+        if (!privacyChecked && e.privacyConsent) pushLog(e, 'alert', actorName(), t('log_privacy_revoked'));
         if (!privacyChecked) e.privacyConsentDate = null;
         e.privacyConsent = privacyChecked;
         e.lastUpdate = new Date().toISOString().slice(0, 10);
@@ -1373,7 +1400,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
 
   function csvCell(v) {
-    const s = (v == null ? '' : String(v));
+    let s = (v == null ? '' : String(v));
+    // Formula-injection guard: Excel executes cells starting with = + - @ as formulas.
+    if (/^[=+\-@]/.test(s)) s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   }
   function exportCandidatesCsv() {
@@ -1526,6 +1555,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   function createDocFromForm() {
     const n = getNurse(pendingDocNurse);
     if (!n) { closeModal(); return; }
+    if (!canOperatePhase(n.currentStep)) { closeModal(); return; } // the other team's phase
     const name = fieldVal('ad-name');
     if (!name) {
       const err = document.getElementById('ad-error');
@@ -1628,6 +1658,14 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         settingsSection('agencies') + settingsSection('employers') + settingsSection('operators') +
       '</div>' +
       '<div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">' + settingsSection('docTypes') + settingsSection('specialties') + '</div>' +
+      '<div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+        '<div class="mb-1 flex items-center gap-2"><i data-lucide="archive" class="h-5 w-5 text-indigo-500"></i><h3 class="text-sm font-bold text-slate-900">' + t('backup_title') + '</h3></div>' +
+        '<p class="mb-3 text-xs text-slate-500">' + t('backup_desc') + '</p>' +
+        '<div class="flex flex-wrap gap-2">' +
+          '<button data-action="backup-export" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="download" class="h-3.5 w-3.5"></i>' + t('backup_export') + '</button>' +
+          '<button data-action="backup-import" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"><i data-lucide="upload" class="h-3.5 w-3.5"></i>' + t('backup_import') + '</button>' +
+        '</div>' +
+      '</div>' +
     '</main>';
   }
 
@@ -1661,18 +1699,62 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const type = pendingEntity.type; if (!type) return;
     const obj = {};
     ENTITY_FIELDS[type].forEach((f) => { obj[f.key] = fieldVal('ent-' + f.key); });
-    if (!obj.name) { const err = document.getElementById('ent-error'); if (err) { err.textContent = t('name_required'); err.classList.remove('hidden'); } return; }
+    if (!obj.name) { formError('ent-error', t('name_required')); return; }
+    // A typo'd operator email ends up in the Firestore access map: that operator
+    // simply can't log in and nobody understands why. Validate it here.
+    if (type === 'operators' && obj.email && !isValidEmail(obj.email)) { formError('ent-error', t('err_email_invalid')); return; }
     const list = state.settings[type];
-    if (pendingEntity.id) { const ex = list.find((x) => x.id === pendingEntity.id); if (ex) Object.assign(ex, obj); }
+    if (pendingEntity.id) {
+      const ex = list.find((x) => x.id === pendingEntity.id);
+      if (ex) {
+        // Nurses and requests reference these records as plain-text labels (employers as
+        // "name · city"): propagate a rename so no case is left pointing to a ghost.
+        const oldLabel = entityRefLabel(type, ex), newLabel = entityRefLabel(type, obj);
+        if (oldLabel && newLabel && oldLabel !== newLabel) propagateEntityRename(type, oldLabel, newLabel);
+        Object.assign(ex, obj);
+      }
+    }
     else { list.push(Object.assign({ id: uid() }, obj)); }
     closeModal();
     commit();
+  }
+  // The exact string stored on nurses/requests for each entity (employers include the city,
+  // matching employerOptions()).
+  function entityRefLabel(type, obj) {
+    if (!obj) return '';
+    if (type === 'employers') return (obj.name || '') + (obj.city ? ' · ' + obj.city : '');
+    return obj.name || '';
+  }
+  // Fields on nurses/requests that hold each entity type's label as a plain string.
+  function entityNameRefs(type) {
+    return type === 'operators' ? { nurse: ['hrReferent'], request: [] }
+      : type === 'employers' ? { nurse: ['employer'], request: ['employer'] }
+      : type === 'agencies' ? { nurse: ['partnerAgency'], request: [] }
+      : null;
+  }
+  function propagateEntityRename(type, oldLabel, newLabel) {
+    const refs = entityNameRefs(type); if (!refs) return;
+    state.nurses.forEach((n) => refs.nurse.forEach((k) => { if (n[k] === oldLabel) n[k] = newLabel; }));
+    (state.requests || []).forEach((r) => refs.request.forEach((k) => { if (r[k] === oldLabel) r[k] = newLabel; }));
+  }
+  function entityUsageCount(type, label) {
+    const refs = entityNameRefs(type);
+    if (refs) {
+      let c = 0;
+      state.nurses.forEach((n) => refs.nurse.forEach((k) => { if (n[k] === label) c++; }));
+      (state.requests || []).forEach((r) => refs.request.forEach((k) => { if (r[k] === label) c++; }));
+      return c;
+    }
+    if (type === 'specialties') return state.nurses.filter((n) => nurseSpecs(n).indexOf(label) >= 0).length;
+    return 0;
   }
   function deleteEntity(type, id) {
     if (!isAdmin()) return;
     const list = state.settings[type] || [];
     const it = list.find((x) => x.id === id); if (!it) return;
-    if (!confirm(t('confirm_delete', { x: it.name || '' }))) return;
+    const used = entityUsageCount(type, entityRefLabel(type, it));
+    const msg = used > 0 ? t('confirm_delete_used', { x: it.name || '', n: used }) : t('confirm_delete', { x: it.name || '' });
+    if (!confirm(msg)) return;
     state.settings[type] = list.filter((x) => x.id !== id);
     commit();
   }
@@ -2087,6 +2169,99 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     openDocOverlay('privacy-overlay', privacyFormHtml(n));
   }
   function closePrivacyForm() { closeDocOverlay('privacy-overlay'); }
+
+  // ---------- Printable candidate sheet (browser print → paper or "save as PDF") ----------
+  function openNurseSheet(nurseId) {
+    const n = getNurse(nurseId); if (!n) return;
+    openDocOverlay('sheet-overlay', nurseSheetHtml(n));
+  }
+  function closeNurseSheet() { closeDocOverlay('sheet-overlay'); }
+  function nurseSheetHtml(n) {
+    const row = (label, val) => '<tr class="border-b border-slate-100 last:border-0"><td class="w-44 py-1.5 pr-3 align-top text-[11px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</td><td class="py-1.5 text-[13px] text-slate-800">' + (val ? escapeHtml(val) : '—') + '</td></tr>';
+    const sec = (title, inner) => '<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:border-0 print:p-0 print:shadow-none"><h3 class="mb-2 text-sm font-bold text-slate-900">' + title + '</h3>' + inner + '</div>';
+    const tbl = (inner) => '<table class="w-full">' + inner + '</table>';
+    const fase = n.currentStep >= DONE_STEP ? t('state_done') : (Math.min(n.currentStep, LAST_STEP) + '/9 — ' + stepName(n.currentStep));
+    const docRows = (n.documents || []).map((d) =>
+      '<tr class="border-b border-slate-100 last:border-0"><td class="py-1.5 pr-3 text-[13px] text-slate-800">' + escapeHtml(d.name) +
+        (d.optional ? ' <span class="text-[11px] text-slate-400">(' + escapeHtml(t('doc_optional')) + ')</span>' : '') + '</td>' +
+      '<td class="w-28 py-1.5 pr-3 text-[12px] font-semibold text-slate-600">' + docStatusLabel(d.status) + '</td>' +
+      '<td class="w-28 py-1.5 text-[12px] text-slate-500">' + (d.validity ? formatDate(d.validity) : '—') + '</td></tr>').join('');
+    const logRows = (n.logs || []).slice(0, 10).map((l) =>
+      '<tr class="border-b border-slate-100 last:border-0"><td class="w-36 py-1.5 pr-3 align-top text-[11px] text-slate-400">' + formatDateTime(l.at) + '</td>' +
+      '<td class="w-36 py-1.5 pr-3 align-top text-[12px] font-medium text-slate-600">' + escapeHtml(l.author || '') + '</td>' +
+      '<td class="py-1.5 text-[12px] text-slate-700">' + escapeHtml(l.text || '') + '</td></tr>').join('');
+    return '' +
+    '<div class="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">' +
+      '<div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3 sm:px-5">' +
+        '<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow"><i data-lucide="id-card" class="h-4 w-4"></i></div>' +
+        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('sheet_title') + '</h1><p class="text-xs text-slate-500">' + escapeHtml(n.name) + '</p></div>' +
+        '<div class="ml-auto flex items-center gap-2">' +
+          '<button onclick="window.print()" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="printer" class="h-3.5 w-3.5"></i>' + t('manual_btn_print') + '</button>' +
+          '<button data-action="close-sheet" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="x" class="h-3.5 w-3.5"></i>' + t('manual_close') + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mx-auto max-w-3xl space-y-4 px-4 py-8 sm:px-5">' +
+      '<div class="text-center"><h2 class="text-lg font-extrabold text-slate-900">DHL Nurses — ' + t('sheet_title') + '</h2>' +
+        '<p class="text-xs text-slate-400">' + escapeHtml(formatDate(new Date().toISOString().slice(0, 10))) + '</p></div>' +
+      sec(t('tab_dati'), tbl(
+        row(t('f_name'), n.name) + row(t('f_birth'), [n.birthDate ? formatDate(n.birthDate) : '', n.birthPlace || ''].filter(Boolean).join(' · ')) +
+        row(t('f_nationality'), n.nationality) + row(t('f_marital'), n.maritalStatus ? t('ms_' + n.maritalStatus) : '') +
+        row(t('f_address'), n.address) + row(t('f_passport'), n.passport) + row(t('f_passport_exp'), n.passportExpiry ? formatDate(n.passportExpiry) : '') +
+        row(t('f_cedula'), n.cedula) + row(t('f_cedula_exp'), n.cedulaExpiry ? formatDate(n.cedulaExpiry) : ''))) +
+      sec(t('tab_contatti'), tbl(
+        row(t('f_phone'), n.phone) + row(t('f_email'), n.email) + row(t('f_agency'), n.partnerAgency) +
+        row(t('f_employer'), n.employer) + row(t('f_hr'), n.hrReferent))) +
+      sec(t('tab_competenze'), tbl(
+        row(t('f_role'), n.profRole) + row(t('f_sector'), n.profSector) + row(t('f_experience'), n.profExperience) +
+        row(t('f_lang'), n.languageLevel) + row(t('f_specs'), nurseSpecs(n).join(' · ')))) +
+      sec(t('f_status'), tbl(
+        row(t('sheet_phase'), fase) + row(t('f_privacy'), n.privacyConsent ? t('privacy_given', { d: n.privacyConsentDate ? formatDate(n.privacyConsentDate) : '—' }) : t('privacy_none')) +
+        row(t('f_last'), n.lastUpdate ? formatDate(n.lastUpdate) : ''))) +
+      sec(t('docs_title'), tbl('<thead><tr class="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400"><th class="pb-1 pr-3">' + t('th_document') + '</th><th class="pb-1 pr-3">' + t('th_status') + '</th><th class="pb-1">' + t('sheet_validity') + '</th></tr></thead><tbody>' + docRows + '</tbody>')) +
+      sec(t('log_title'), tbl('<tbody>' + (logRows || '') + '</tbody>')) +
+    '</div>';
+  }
+
+  // ---------- Full JSON backup / restore (admin) ----------
+  function exportBackup() {
+    if (!isAdmin()) return;
+    const payload = { app: 'dhl-nurses-backup', version: 1, exportedAt: new Date().toISOString(), nurses: state.nurses, requests: state.requests || [], settings: state.settings };
+    downloadFile('dhl-nurses-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(payload), 'application/json');
+  }
+  function triggerImportBackup() {
+    if (!isAdmin()) return;
+    let input = document.getElementById('backup-file-input');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'backup-file-input';
+      input.style.display = 'none';
+      input.accept = '.json,application/json';
+      input.addEventListener('change', onBackupFileChosen);
+      document.body.appendChild(input);
+    }
+    input.value = '';
+    input.click();
+  }
+  function onBackupFileChosen(e) {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      let data = null;
+      try { data = JSON.parse(r.result); } catch (err) { alert(t('backup_invalid')); return; }
+      if (!data || data.app !== 'dhl-nurses-backup' || !Array.isArray(data.nurses)) { alert(t('backup_invalid')); return; }
+      if (!confirm(t('backup_import_confirm', { d: (data.exportedAt || '').slice(0, 10), n: data.nurses.length }))) return;
+      state.nurses = data.nurses;
+      state.requests = Array.isArray(data.requests) ? data.requests : [];
+      if (data.settings) state.settings = data.settings;
+      normalizeState(state);
+      state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
+      showToast(t('backup_done'), 'ok');
+      commit();
+    };
+    r.readAsText(file);
+  }
 
   function privacyFormHtml(n) {
     const dot = '<span class="text-slate-400">____________________________</span>';
@@ -3094,7 +3269,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             '<button data-action="open-manual" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="book-open" class="h-3.5 w-3.5"></i><span>' + t('manual') + '</span></button>' +
             '<button data-action="open-guide" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="scale" class="h-3.5 w-3.5"></i><span>' + t('norm_guide') + '</span></button>' +
             '<button data-action="start-tour" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span>' + t('guide') + '</span></button>' +
-            (isAdmin() ? '<button data-action="reset" class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i><span class="lg:hidden">' + t('reset_tooltip') + '</span></button>' : '') +
+            // "Reset demo data" is a DEMO feature: in cloud mode it would wipe the whole
+            // team's real caseload, so the button only exists in the local demo.
+            (isAdmin() && !fbEnabled ? '<button data-action="reset" class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('reset_tooltip')) + '"><i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i><span class="lg:hidden">' + t('reset_tooltip') + '</span></button>' : '') +
           '</div>' +
           userCluster() +
         '</div>' +
@@ -3374,7 +3551,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       return (
         n.name.toLowerCase().includes(q) ||
         n.passport.toLowerCase().includes(q) ||
-        (n.employer || '').toLowerCase().includes(q)
+        (n.employer || '').toLowerCase().includes(q) ||
+        (n.partnerAgency || '').toLowerCase().includes(q) ||
+        (n.hrReferent || '').toLowerCase().includes(q) ||
+        (n.birthPlace || '').toLowerCase().includes(q) ||
+        nurseSpecs(n).some((s) => s.toLowerCase().includes(q))
       );
     });
   }
@@ -3498,6 +3679,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '<div class="flex flex-col items-start gap-2 sm:items-end">' +
           statusBadge(deriveStatus(n)) +
           '<span class="text-xs text-slate-400">' + t('last_update', { d: formatDate(n.lastUpdate) }) + '</span>' +
+          '<button data-action="open-sheet" data-id="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-white/70 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:bg-white" data-tooltip="' + escapeHtml(t('sheet_tip')) + '"><i data-lucide="printer" class="h-3 w-3"></i>' + t('sheet_btn') + '</button>' +
           '<button data-action="open-edit-nurse" data-id="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-white/70 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-white"><i data-lucide="pencil" class="h-3 w-3"></i>' + t('edit_candidate') + '</button>' +
         '</div>' +
       '</div>' +
@@ -3576,6 +3758,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const personalNames = PERSONAL_DOC_TYPES.map((p) => p.name.toLowerCase());
     const docs = (n.documents || []).filter((d) => personalNames.indexOf((d.name || '').toLowerCase()) >= 0);
     if (!docs.length) return '';
+    // Phase owned by the other team: documents are read-only (same rule as checklist/advance).
+    const docsLocked = n.currentStep < DONE_STEP && !canOperatePhase(n.currentStep);
     const rows = docs.map((d) => {
       const statusIcon = d.status === 'approved' ? '<i data-lucide="check-circle-2" class="h-4 w-4 shrink-0 text-emerald-500"></i>'
         : d.status === 'pending' ? '<i data-lucide="clock" class="h-4 w-4 shrink-0 text-amber-500"></i>'
@@ -3583,7 +3767,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       const viewBtn = (d.fileName && (d.fileUrl || d.fileStore))
         ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="eye" class="h-3.5 w-3.5"></i></button>'
         : '';
-      const uploadBtn = '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
+      const uploadBtn = docsLocked ? '' : '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
       return '<div class="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">' +
         statusIcon +
         '<div class="min-w-0 flex-1">' +
@@ -3683,13 +3867,17 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   }
 
   function documentManager(n) {
+    // Same team rule as checklist/advance: the other team's phase is read-only here too.
+    const docsLocked = n.currentStep < DONE_STEP && !canOperatePhase(n.currentStep);
     const rows = n.documents.map((d) => {
       const cls = DOC_STATUS_CLS[d.status], icon = DOC_STATUS_ICON[d.status];
-      const uploadBtn = '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
+      const uploadBtn = docsLocked ? '' : '<button data-action="upload-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-50">' + (d.fileName ? t('act_replace') : t('act_upload')) + '</button>';
       const viewBtn = d.fileName
         ? '<button data-action="view-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="rounded-lg px-2 py-1 text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" data-tooltip="' + escapeHtml(t('doc_view')) + '"><i data-lucide="eye" class="h-3.5 w-3.5"></i></button>'
         : '';
-      const actions = d.status === 'approved'
+      const actions = docsLocked
+        ? '<div class="flex flex-wrap justify-end gap-1.5">' + viewBtn + '</div>'
+        : d.status === 'approved'
         ? '<div class="flex flex-wrap justify-end gap-1.5">' + viewBtn + uploadBtn +
             '<button data-action="delete-doc" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"><i data-lucide="trash-2" class="h-3 w-3"></i>' + t('act_delete') + '</button></div>'
         : d.status === 'missing'
@@ -3709,7 +3897,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           (d.optional ? ' <span class="ml-1 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">' + escapeHtml(t('doc_optional')) + '</span>' : '') + '</p>' +
           '<p class="text-[11px] text-slate-400">' + t('validity', { v: (d.validity ? escapeHtml(d.validity) : '—') }) +
             (d.uploadDate ? ' · ' + t('th_uploaded') + ': ' + formatDate(d.uploadDate) : '') + '</p>' + fileLine + '</td>' +
-        '<td class="px-2 py-3"><select data-action="doc-status" data-nurse="' + n.id + '" data-doc="' + d.id + '" class="cursor-pointer appearance-none rounded-full border-0 px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ' + cls + '">' +
+        '<td class="px-2 py-3"><select data-action="doc-status" data-nurse="' + n.id + '" data-doc="' + d.id + '"' + (docsLocked ? ' disabled' : '') + ' class="' + (docsLocked ? 'cursor-not-allowed opacity-60 ' : 'cursor-pointer ') + 'appearance-none rounded-full border-0 px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ' + cls + '">' +
           ['missing', 'pending', 'approved'].map((sv) => '<option value="' + sv + '"' + (d.status === sv ? ' selected' : '') + '>' + docStatusLabel(sv) + '</option>').join('') + '</select></td>' +
         '<td class="py-3 pl-2 text-right">' + actions + '</td>' +
       '</tr>';
@@ -3722,8 +3910,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '<i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>' +
         '<h3 class="text-sm font-bold text-slate-900">' + t('docs_title') + '</h3>' +
         '<span class="ml-auto text-xs text-slate-400">' + t('docs_count', { a: approved, b: n.documents.length }) + '</span>' +
-        '<button data-action="open-add-doc" data-nurse="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="plus" class="h-3 w-3"></i>' + t('add') + '</button>' +
+        (docsLocked ? '' : '<button data-action="open-add-doc" data-nurse="' + n.id + '" class="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200 transition hover:bg-indigo-100"><i data-lucide="plus" class="h-3 w-3"></i>' + t('add') + '</button>') +
       '</div>' +
+      (docsLocked ? '<div class="mb-2 flex items-center gap-2 rounded-xl bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 ring-1 ring-inset ring-sky-200"><i data-lucide="users" class="h-3.5 w-3.5"></i>' + t('phase_team_locked', { team: escapeHtml(teamTag(stepTeam(n.currentStep))) }) + '</div>' : '') +
       '<div class="-mx-5 overflow-x-auto px-5">' +
         '<table class="w-full min-w-[340px]">' +
           '<thead><tr class="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">' +
@@ -3921,7 +4110,6 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       firebase.initializeApp(FIREBASE_CONFIG);
       auth = firebase.auth();
       db = firebase.firestore();
-      try { storage = firebase.storage(); } catch (e) { storage = null; }
       fbEnabled = true;
       auth.onAuthStateChanged(async (user) => {
         authResolved = true;
@@ -4171,6 +4359,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'open-guide': openGuide(); break;
       case 'close-guide': closeGuide(); break;
       case 'print-privacy': openPrivacyForm(t.getAttribute('data-id')); break;
+      case 'open-sheet': openNurseSheet(t.getAttribute('data-id')); break;
+      case 'close-sheet': closeNurseSheet(); break;
+      case 'backup-export': exportBackup(); break;
+      case 'backup-import': triggerImportBackup(); break;
       case 'close-privacy': closePrivacyForm(); break;
       case 'set-lang': setLang(t.getAttribute('data-lang')); break;
       case 'toggle-theme': toggleTheme(); break;
@@ -4201,6 +4393,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('modal-layer')) closeModal();
+    else if (document.getElementById('sheet-overlay')) closeNurseSheet();
     else if (document.getElementById('privacy-overlay')) closePrivacyForm();
     else if (document.getElementById('guide-overlay')) closeGuide();
     else if (document.getElementById('manual-overlay')) closeManual();

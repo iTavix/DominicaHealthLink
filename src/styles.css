@@ -60,12 +60,12 @@
     #guide-overlay h2[id], #guide-overlay section[id], #guide-overlay li[id] { scroll-margin-top: 80px; }
     #manual-overlay .toc-link.active, #guide-overlay .toc-link.active { color: #4f46e5; font-weight: 600; background: #eef2ff; }
     @media print {
-      body > *:not(#manual-overlay):not(#guide-overlay):not(#privacy-overlay) { display: none !important; }
-      #manual-overlay, #guide-overlay, #privacy-overlay { position: static !important; overflow: visible !important; background: #fff !important; }
-      #manual-overlay .no-print, #guide-overlay .no-print, #privacy-overlay .no-print { display: none !important; }
+      body > *:not(#manual-overlay):not(#guide-overlay):not(#privacy-overlay):not(#sheet-overlay) { display: none !important; }
+      #manual-overlay, #guide-overlay, #privacy-overlay, #sheet-overlay { position: static !important; overflow: visible !important; background: #fff !important; }
+      #manual-overlay .no-print, #guide-overlay .no-print, #privacy-overlay .no-print, #sheet-overlay .no-print { display: none !important; }
       #manual-overlay aside, #guide-overlay aside { display: none !important; }
-      /* The privacy form is signed on paper: always print it in light colors. */
-      #privacy-overlay, #privacy-overlay * { color: #0f172a !important; background: #fff !important; }
+      /* Privacy form and candidate sheet end up on paper: always print them in light colors. */
+      #privacy-overlay, #privacy-overlay *, #sheet-overlay, #sheet-overlay * { color: #0f172a !important; background: #fff !important; }
     }
 
     /* ===== Dark mode: remap the slate/white palette used across the app ===== */

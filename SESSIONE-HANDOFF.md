@@ -28,6 +28,21 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 12 lug 2026 (notte, 2ª parte) — Punti 6-17 del report (non ancora deployata)
+
+- **Scadenze anagrafiche in dashboard**: passaporto/cédula in scadenza (entro 60 gg) ora entrano in `computeExpiring` → pannello «Documenti in scadenza» e KPI (voci virtuali con etichette f_passport_exp/f_cedula_exp; il clic apre la pratica; la vista Archivio invece mostra solo i file veri).
+- **Gating team esteso ai documenti**: approvazioni, respinte, cambio stato, upload, eliminazione file e aggiunta documento rispettano `canOperatePhase` (guardie nelle funzioni + UI: select disabilitati, pulsanti nascosti, avviso azzurro in tabella). Admin e operatori senza team = pieno accesso, come prima.
+- **Validazioni**: email (formato) su candidato e operatore (l'email operatore finisce nella access map: un refuso = accesso rotto), passaporto duplicato bloccato con nome del titolare esistente (case-insensitive).
+- **Integrità referenziale**: rinominare agenzia/datore/operatore aggiorna le stringhe su pratiche e richieste (`propagateEntityRename`; per i datori l'etichetta è «nome · città» — `entityRefLabel`); eliminare una voce usata avvisa con il conteggio d'uso (`entityUsageCount`, anche specializzazioni).
+- **Backup completo** (Impostazioni, admin): esporta JSON di candidati+richieste+impostazioni; ripristino da file con doppio avviso (sostituisce tutto; i file caricati restano nel cloud, nel backup ci sono solo i riferimenti).
+- **Scheda Candidato stampabile** (pulsante «Scheda» accanto a Modifica anagrafica): overlay `#sheet-overlay` con anagrafica, contatti, competenze, stato/fase, tabella documenti e ultime 10 voci di log; Stampa/PDF via window.print (CSS print aggiornato in styles.css, sempre a colori chiari).
+- **«Ripristina dati demo» eliminato in cloud** (pulsante nascosto + guardia in resetData): esiste solo nella demo locale.
+- **GDPR**: la revoca del consenso privacy ora viene loggata (log_privacy_revoked). Il titolare del trattamento nel modulo resta placeholder: SERVONO ragione sociale/sede/contatti dall'utente.
+- **Minori**: chunk di file orfani ripuliti se l'upload fallisce a metà; guardia CSV injection (celle che iniziano con = + - @); ricerca pratiche estesa (anche agenzia, referente HR, luogo di nascita, specializzazioni); rimossi Firebase Storage (import, init, vite manualChunks, storage.rules, firebase.json) e la chiave i18n morta set_operators_desc2.
+- Nuove chiavi i18n: err_email_invalid, err_passport_dupe, confirm_delete_used, log_privacy_revoked, sheet_*, backup_* (IT/EN/ES).
+- Testato in demo locale su :4599 (KPI scadenze, duplicato, email, rinomina datore con propagazione, scheda, blocco team con Bianchi/operator). ApiKey ripristinata, build ok.
+- Manuale in-app NON ancora aggiornato (chip sync + tutte le novità): da fare a fine giro modifiche, come concordato con l'utente.
+
 ### Sessione 12 lug 2026 (notte) — Logo + robustezza sync multi-operatore (non ancora deployata)
 
 Corretti i punti 1–5 del report "cosa manca" (vedi log conversazione):
