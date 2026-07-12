@@ -3218,7 +3218,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       : state.view === 'documents' ? archiveView()
       : state.view === 'matching' ? matchingView()
       : casesView();
-    root.innerHTML = demoBanner() + header() + body + appFooter();
+    // #app is a min-height:100vh flex column (see styles.css): the main area grows so the
+    // footer is pushed to the bottom of the viewport even on short pages (e.g. Matching with
+    // a single request).
+    root.innerHTML = demoBanner() + header() + '<div class="dhl-main">' + body + '</div>' + appFooter();
     lucide.createIcons();
     syncHistory();
     maybeAutoStartTour();
@@ -4420,6 +4423,11 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
 
   // Close any open modal / tour with the Escape key.
   document.addEventListener('keydown', (e) => {
+    // Arrow keys drive the interactive guided tour: →/↓ next step, ←/↑ previous.
+    if (tour.active && !document.getElementById('modal-layer')) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); tourNext(); return; }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); tourPrev(); return; }
+    }
     if (e.key !== 'Escape') return;
     if (document.getElementById('modal-layer')) closeModal();
     else if (document.getElementById('sheet-overlay')) closeNurseSheet();
