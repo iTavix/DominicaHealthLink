@@ -28,6 +28,12 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 12 lug 2026 (notte, 4ª parte) — Frecce guida + footer sticky (prod+demo, ONLINE) + dati matching demo
+
+- **Frecce tastiera nel tour «Guida»** (prod commit b3b8794, demo 30103ae): nel gestore keydown, se `tour.active` e nessuna modale → →/↓ `tourNext()`, ←/↑ `tourPrev()` (con preventDefault). NB: il tasto del tool browser di test non arriva alla pagina; verificato via dispatch reale (start→2× ArrowRight = passo 3, ArrowLeft = passo 2).
+- **Footer sempre in fondo**: `#app` reso colonna flex `min-height:100vh` (styles.css), il body avvolto in `<div class="dhl-main">` con `flex:1 0 auto`; footer `flex-shrink:0`. Risolve il footer «a mezz'aria» nelle viste corte (es. Matching con una sola scheda). Applicato a prod E demo.
+- **Demo — dati fittizi nel matching**: seed `requests` ora 4 richieste: Padova (Terapia Intensiva, qty 2, **1/2** con Carlos), San Raffaele Milano (Nefrologia e Dialisi, qty 1, **Abbinata** con Rosa), Bologna S.Orsola (Sala Operatoria, aperta), Firenze Meyer (Pediatria, aperta). Pre-abbinati coerenti: `carlos.matchedRequestId='req_padova_ti'`, `rosa.matchedRequestId='req_sr_dialisi'` (employer già coincidenti). ⚠️ Per vedere il nuovo seed serve azzerare il localStorage o usare «Ripristina dati demo» (i test avevano dati vecchi salvati).
+
 ### Sessione 12 lug 2026 (notte, 3ª parte) — Alert richieste (prod, ONLINE) + Demo rifatta (ONLINE)
 
 **Produzione** — Alert sulle richieste di matching (commit 9cbe870, deployato):
