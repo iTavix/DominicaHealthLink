@@ -28,7 +28,20 @@
 
 ## 3. Funzionalità implementate
 
-### Sessione 12 lug 2026 (notte, 2ª parte) — Punti 6-17 del report (non ancora deployata)
+### Sessione 12 lug 2026 (notte, 3ª parte) — Alert richieste (prod, ONLINE) + Demo rifatta (ONLINE)
+
+**Produzione** — Alert sulle richieste di matching (commit 9cbe870, deployato):
+- Toast «📋 Nuova richiesta» alla creazione e «✅ Richiesta soddisfatta» quando l'organico è al completo (in `assignMatch` e in `saveRequestFromForm` per la modifica quantità).
+- `alertRemoteRequestEvents` in `applyRemoteCases`: stessi due avvisi quando l'evento arriva da un ALTRO operatore via sync (max 2 toast per snapshot). Chiavi `toast_req_*` IT/EN/ES.
+
+**Demo** (`demo_dhl_nurses`, repo dhl-nurses-demo, deployata):
+- ⚠️ SCOPERTA: la demo era un **fork più vecchio** — non aveva l'intero sottosistema file-storage Firestore + dropdown stato documenti di produzione (assenti anche nel backup). «Parità completa» reinterpretata come parità delle FUNZIONI VISIBILI; saltato il back-end Firestore inerte in demo (nessun login/DB).
+- Portate: alert richieste, scheda candidato PDF, scadenze anagrafiche in dashboard, backup dati, validazioni email/passaporto, integrità riferimenti (rinomina+uso), autore reale nei log, gating documenti per team, ricerca estesa, log revoca privacy, potatura log, cleanup abbinamenti su delete. Adattate al modello file più semplice della demo (documentManager senza dropdown; rejectDoc/approveDoc diversi). Rimosso Firebase Storage.
+- **Welcome → landing a scorrimento**: `LANDING_SECTIONS` (8 sezioni), hero + sezioni animate allo scroll (IntersectionObserver + classi `.wl-reveal/.in` in styles.css), layout alternato, anteprime SVG riusate da `welcomePreview` (aggiunte wl_s7 alert e wl_s8 PDF), pulsante «Scopri di più» → popup `#wl-detail` con dettagli (chiavi `ld_s1..s8`), barra avanzamento scroll, CTA finale, trilingue, responsive (lang sempre visibile, verificato mobile). Testato su :4601, apiKey vuota confermata.
+- ⚠️ Gli stili `wl-slide/.wl-dot` del vecchio carosello restano in styles.css ma non più usati (innocui). La demo NON ha più sync/onSnapshot: è tutta locale.
+- Manuale in-app (prod E demo) ancora da aggiornare con le novità — da fare quando l'utente vuole.
+
+### Sessione 12 lug 2026 (notte, 2ª parte) — Punti 6-17 del report (deployata, commit 503bec6)
 
 - **Scadenze anagrafiche in dashboard**: passaporto/cédula in scadenza (entro 60 gg) ora entrano in `computeExpiring` → pannello «Documenti in scadenza» e KPI (voci virtuali con etichette f_passport_exp/f_cedula_exp; il clic apre la pratica; la vista Archivio invece mostra solo i file veri).
 - **Gating team esteso ai documenti**: approvazioni, respinte, cambio stato, upload, eliminazione file e aggiunta documento rispettano `canOperatePhase` (guardie nelle funzioni + UI: select disabilitati, pulsanti nascosti, avviso azzurro in tabella). Admin e operatori senza team = pieno accesso, come prima.
