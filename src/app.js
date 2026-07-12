@@ -1933,8 +1933,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '<p><b>Cédula:</b> ' + v(n.cedula) + ' &nbsp;·&nbsp; <b>Passaporto · Pasaporte:</b> ' + v(n.passport) + '</p>' +
           '<p><b>Indirizzo · Dirección:</b> ' + v(n.address) + '</p>' +
         '</div>' +
-        clause('<b>1. Titolare del trattamento.</b> DominicaHealthLink — Gestionale Trasferimento Infermieri (integrare con ragione sociale, sede e contatti del Titolare).',
-               '<b>1. Responsable del tratamiento.</b> DominicaHealthLink — Gestión de Traslado de Enfermeros (completar con razón social, sede y contactos del Responsable).') +
+        clause('<b>1. Titolare del trattamento.</b> DHL Nurses — Gestionale Trasferimento Infermieri (integrare con ragione sociale, sede e contatti del Titolare).',
+               '<b>1. Responsable del tratamiento.</b> DHL Nurses — Gestión de Traslado de Enfermeros (completar con razón social, sede y contactos del Responsable).') +
         clause('<b>2. Finalità.</b> I dati sono trattati per la gestione della candidatura e della pratica di trasferimento in Italia: riconoscimento del titolo professionale, nulla osta al lavoro, visto d’ingresso, permesso di soggiorno, iscrizione OPI e inserimento presso la struttura sanitaria di destinazione.',
                '<b>2. Finalidad.</b> Los datos se tratan para la gestión de la candidatura y del expediente de traslado a Italia: reconocimiento del título profesional, autorización de trabajo, visado de entrada, permiso de residencia, inscripción OPI e incorporación a la estructura sanitaria de destino.') +
         clause('<b>3. Categorie di dati.</b> Dati anagrafici e di contatto, documenti d’identità, titoli di studio e professionali, curriculum; ove richiesto dalla normativa: certificati penali e certificati sanitari (categorie particolari ex artt. 9–10 GDPR).',
@@ -1966,7 +1966,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     '<div class="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">' +
       '<div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-5">' +
         '<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow"><i data-lucide="scale" class="h-4 w-4"></i></div>' +
-        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('norm_guide_title') + '</h1><p class="text-xs text-slate-500">DominicaHealthLink · Normativa</p></div>' +
+        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('norm_guide_title') + '</h1><p class="text-xs text-slate-500">DHL Nurses · Normativa</p></div>' +
         '<div class="ml-auto flex items-center gap-2">' +
           '<button onclick="window.print()" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="printer" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('manual_btn_print') + '</span></button>' +
           '<button data-action="close-guide" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="x" class="h-3.5 w-3.5"></i>' + t('manual_close') + '</button>' +
@@ -1991,7 +1991,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     '<div class="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">' +
       '<div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-5">' +
         '<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow"><i data-lucide="book-open" class="h-4 w-4"></i></div>' +
-        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('manual_title') + '</h1><p class="text-xs text-slate-500">DominicaHealthLink · v1.0</p></div>' +
+        '<div><h1 class="text-sm font-extrabold leading-tight text-slate-900">' + t('manual_title') + '</h1><p class="text-xs text-slate-500">DHL Nurses · v1.0</p></div>' +
         '<div class="ml-auto flex items-center gap-2">' +
           '<button onclick="window.print()" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50"><i data-lucide="printer" class="h-3.5 w-3.5"></i><span class="hidden sm:inline">' + t('manual_btn_print') + '</span></button>' +
           '<button data-action="close-manual" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"><i data-lucide="x" class="h-3.5 w-3.5"></i>' + t('manual_close') + '</button>' +
@@ -2010,13 +2010,13 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     return `
       <div class="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 to-indigo-900 p-7 text-white shadow-sm">
         <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-inset ring-white/20"><i data-lucide="book-open" class="h-3.5 w-3.5"></i>Manuale Operatore</span>
-        <h2 class="mt-3 text-2xl font-extrabold">Come usare DominicaHealthLink</h2>
+        <h2 class="mt-3 text-2xl font-extrabold">Come usare DHL Nurses</h2>
         <p class="mt-2 max-w-2xl text-sm text-slate-300">Guida pratica per il personale HR e gli operatori che seguono il trasferimento degli infermieri dalla Repubblica Dominicana alle strutture sanitarie italiane. Spiega ogni schermata, ogni pulsante e le procedure quotidiane.</p>
       </div>
 
       <section id="intro" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="info" class="h-5 w-5 text-indigo-500"></i>1. Introduzione</h2>
-        <p class="text-sm leading-relaxed text-slate-600">DominicaHealthLink è il gestionale che segue ogni candidato infermiere lungo l'intero percorso: dalla selezione in Repubblica Dominicana fino all'inserimento e all'assistenza nella struttura sanitaria italiana. Ogni candidato è una <b>pratica</b> che attraversa <b>9 fasi sequenziali</b>, divise tra due team: il <b>Team Repubblica Dominicana</b> (fasi 1–4, fino alla partenza) e il <b>Team Italia</b> (fasi 5–9, dall'arrivo in poi). Il sistema impedisce di saltare passaggi e segnala le pratiche in ritardo.</p>
+        <p class="text-sm leading-relaxed text-slate-600">DHL Nurses è il gestionale che segue ogni candidato infermiere lungo l'intero percorso: dalla selezione in Repubblica Dominicana fino all'inserimento e all'assistenza nella struttura sanitaria italiana. Ogni candidato è una <b>pratica</b> che attraversa <b>9 fasi sequenziali</b>, divise tra due team: il <b>Team Repubblica Dominicana</b> (fasi 1–4, fino alla partenza) e il <b>Team Italia</b> (fasi 5–9, dall'arrivo in poi). Il sistema impedisce di saltare passaggi e segnala le pratiche in ritardo.</p>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-white p-4"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i><p class="mt-2 text-sm font-bold text-slate-800">Dashboard Analitica</p><p class="mt-1 text-xs text-slate-500">La visione d'insieme: numeri chiave e allarmi.</p></div>
           <div class="rounded-xl border border-slate-200 bg-white p-4"><i data-lucide="folder-kanban" class="h-5 w-5 text-indigo-500"></i><p class="mt-2 text-sm font-bold text-slate-800">Gestione Pratiche</p><p class="mt-1 text-xs text-slate-500">Il lavoro sul singolo candidato.</p></div>
@@ -2271,7 +2271,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         </tbody></table></div>
       </section>
 
-      <footer class="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">DominicaHealthLink · Manuale Operatore v1.0 — Documento ad uso interno del personale HR.</footer>
+      <footer class="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">DHL Nurses · Manuale Operatore v1.0 — Documento ad uso interno del personale HR.</footer>
     `;
   }
 
@@ -2279,13 +2279,13 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     return `
       <div class="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 to-indigo-900 p-7 text-white shadow-sm">
         <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-inset ring-white/20"><i data-lucide="book-open" class="h-3.5 w-3.5"></i>Operator Manual</span>
-        <h2 class="mt-3 text-2xl font-extrabold">How to use DominicaHealthLink</h2>
+        <h2 class="mt-3 text-2xl font-extrabold">How to use DHL Nurses</h2>
         <p class="mt-2 max-w-2xl text-sm text-slate-300">A practical guide for HR staff and operators following the transfer of nurses from the Dominican Republic to Italian healthcare facilities. It explains every screen, button and daily procedure.</p>
       </div>
 
       <section id="intro" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="info" class="h-5 w-5 text-indigo-500"></i>1. Introduction</h2>
-        <p class="text-sm leading-relaxed text-slate-600">DominicaHealthLink tracks each nurse candidate along the entire path: from selection in the Dominican Republic to placement and support in an Italian facility. Each candidate is a <b>case</b> that goes through <b>9 sequential phases</b>, split between two teams: the <b>Dominican Republic Team</b> (phases 1–4, up to departure) and the <b>Italy Team</b> (phases 5–9, from arrival onwards). The system prevents skipping steps and flags overdue cases.</p>
+        <p class="text-sm leading-relaxed text-slate-600">DHL Nurses tracks each nurse candidate along the entire path: from selection in the Dominican Republic to placement and support in an Italian facility. Each candidate is a <b>case</b> that goes through <b>9 sequential phases</b>, split between two teams: the <b>Dominican Republic Team</b> (phases 1–4, up to departure) and the <b>Italy Team</b> (phases 5–9, from arrival onwards). The system prevents skipping steps and flags overdue cases.</p>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-white p-4"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i><p class="mt-2 text-sm font-bold text-slate-800">Analytics Dashboard</p><p class="mt-1 text-xs text-slate-500">The overview: key numbers and alerts.</p></div>
           <div class="rounded-xl border border-slate-200 bg-white p-4"><i data-lucide="folder-kanban" class="h-5 w-5 text-indigo-500"></i><p class="mt-2 text-sm font-bold text-slate-800">Case Management</p><p class="mt-1 text-xs text-slate-500">Work on a single candidate.</p></div>
@@ -2533,7 +2533,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         </tbody></table></div>
       </section>
 
-      <footer class="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">DominicaHealthLink · Operator Manual v1.0 — Internal document for HR staff.</footer>
+      <footer class="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">DHL Nurses · Operator Manual v1.0 — Internal document for HR staff.</footer>
     `;
   }
 
@@ -2541,13 +2541,13 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     return `
       <div class="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 to-indigo-900 p-7 text-white shadow-sm">
         <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-inset ring-white/20"><i data-lucide="book-open" class="h-3.5 w-3.5"></i>Manual del Operador</span>
-        <h2 class="mt-3 text-2xl font-extrabold">Cómo usar DominicaHealthLink</h2>
+        <h2 class="mt-3 text-2xl font-extrabold">Cómo usar DHL Nurses</h2>
         <p class="mt-2 max-w-2xl text-sm text-slate-300">Guía práctica para el personal de RR.HH. y los operadores que siguen el traslado de enfermeros desde la República Dominicana a las estructuras sanitarias italianas. Explica cada pantalla, botón y procedimiento diario.</p>
       </div>
 
       <section id="intro" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="info" class="h-5 w-5 text-indigo-500"></i>1. Introducción</h2>
-        <p class="text-sm leading-relaxed text-slate-600">DominicaHealthLink sigue a cada candidato enfermero a lo largo de todo el recorrido: desde la selección en la República Dominicana hasta la inserción y la asistencia en una estructura italiana. Cada candidato es un <b>expediente</b> que atraviesa <b>9 fases secuenciales</b>, divididas entre dos equipos: el <b>Equipo República Dominicana</b> (fases 1–4, hasta la partida) y el <b>Equipo Italia</b> (fases 5–9, desde la llegada). El sistema impide saltar pasos y señala los expedientes con retraso.</p>
+        <p class="text-sm leading-relaxed text-slate-600">DHL Nurses sigue a cada candidato enfermero a lo largo de todo el recorrido: desde la selección en la República Dominicana hasta la inserción y la asistencia en una estructura italiana. Cada candidato es un <b>expediente</b> que atraviesa <b>9 fases secuenciales</b>, divididas entre dos equipos: el <b>Equipo República Dominicana</b> (fases 1–4, hasta la partida) y el <b>Equipo Italia</b> (fases 5–9, desde la llegada). El sistema impide saltar pasos y señala los expedientes con retraso.</p>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-white p-4"><i data-lucide="layout-dashboard" class="h-5 w-5 text-indigo-500"></i><p class="mt-2 text-sm font-bold text-slate-800">Panel Analítico</p><p class="mt-1 text-xs text-slate-500">La visión global: cifras clave y alertas.</p></div>
           <div class="rounded-xl border border-slate-200 bg-white p-4"><i data-lucide="folder-kanban" class="h-5 w-5 text-indigo-500"></i><p class="mt-2 text-sm font-bold text-slate-800">Gestión de Expedientes</p><p class="mt-1 text-xs text-slate-500">Trabajo sobre un candidato.</p></div>
@@ -2795,7 +2795,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         </tbody></table></div>
       </section>
 
-      <footer class="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">DominicaHealthLink · Manual del Operador v1.0 — Documento de uso interno del personal de RR.HH.</footer>
+      <footer class="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">DHL Nurses · Manual del Operador v1.0 — Documento de uso interno del personal de RR.HH.</footer>
     `;
   }
 
@@ -2875,7 +2875,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
             '<i data-lucide="heart-pulse" class="h-5 w-5"></i></div>' +
           '<div class="min-w-0">' +
-            '<h1 class="truncate text-base font-extrabold leading-tight text-slate-900">DominicaHealthLink</h1>' +
+            '<h1 class="truncate text-base font-extrabold leading-tight text-slate-900">DHL Nurses</h1>' +
             '<p class="hidden truncate text-xs text-slate-500 sm:block">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
           '</div>' +
         '</div>' +
@@ -3041,11 +3041,23 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '<div style="flex:5" class="rounded-lg bg-emerald-50 px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-inset ring-emerald-200">🇮🇹 ' + escapeHtml(t('team_it')) + ' · 5–9</div>' +
       '</div>';
 
+    // Who is working: HR operator record matched to the signed-in user (or the local demo name).
+    const op = currentOperator();
+    const opName = op ? op.name : (fbEnabled && currentUser ? (currentUser.displayName || currentUser.email || '') : localOperatorName());
+    const opTeam = myTeam();
+    const opChip = opName
+      ? '<span data-tooltip="' + escapeHtml(t('operator')) + '" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 shadow-sm"><i data-lucide="user-round" class="h-3.5 w-3.5 text-indigo-500"></i>' +
+        escapeHtml(opName) + (opTeam ? ' · ' + teamFlag(opTeam) + ' ' + escapeHtml(teamLabel(opTeam)) : '') + '</span>'
+      : '';
+
     return '<main class="animate-fadeIn mx-auto max-w-[1400px] px-4 py-6 sm:px-5">' +
-      '<div class="mb-6 flex items-end justify-between gap-3">' +
+      '<div class="mb-6 flex flex-wrap items-end justify-between gap-3">' +
         '<div><h2 class="text-xl font-extrabold text-slate-900">' + t('dash_title') + '</h2>' +
         '<p class="text-sm text-slate-500">' + t('dash_subtitle') + '</p></div>' +
-        (isAdmin() ? '<button data-action="export-csv" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 shadow-sm transition hover:bg-slate-50"><i data-lucide="download" class="h-3.5 w-3.5"></i>' + t('export_csv') + '</button>' : '') +
+        '<div class="flex flex-wrap items-center gap-2">' +
+          opChip +
+          (isAdmin() ? '<button data-action="export-csv" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 shadow-sm transition hover:bg-slate-50"><i data-lucide="download" class="h-3.5 w-3.5"></i>' + t('export_csv') + '</button>' : '') +
+        '</div>' +
       '</div>' +
 
       '<section data-tour="summary" class="dhl-summary mb-6 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm">' +
@@ -3607,7 +3619,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '<div class="mb-4 flex justify-center">' + langSwitcher(true) + '</div>' +
         '<div class="mb-6 flex flex-col items-center text-center">' +
           '<div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-xl shadow-indigo-900/40"><i data-lucide="heart-pulse" class="h-7 w-7"></i></div>' +
-          '<h1 class="text-2xl font-extrabold text-white">DominicaHealthLink</h1>' +
+          '<h1 class="text-2xl font-extrabold text-white">DHL Nurses</h1>' +
           '<p class="mt-1 text-sm text-slate-300">' + t('login_subtitle') + '</p>' +
         '</div>' +
         '<div class="rounded-2xl border border-white/10 bg-white p-6 shadow-2xl">' +
