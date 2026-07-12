@@ -28,6 +28,12 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 12 lug 2026 — Ritocchi UI + numero infermieri (non ancora deployato)
+
+- **Anagrafica**: fase corrente e consenso privacy spostati come chips accanto al nome nell'intestazione (con pulsantino stampa modulo); rimossi dalla scheda "Dati anagrafici".
+- **Richieste matching con organico**: campo `quantity` (numero infermieri richiesti) + **abbinamenti multipli** (`r.matched` = array di {id,name,at}); la richiesta resta Aperta finché non copre tutti i posti (badge «a/b abbinati»), poi diventa Abbinata; ✕ sul singolo chip rimuove quel solo abbinamento. Migrazione in `normalizeState` dei vecchi campi `matchedNurseId/Name/At`. Seed: richiesta Padova ora quantity 2.
+- Manuale §6.1 aggiornato (IT/EN/ES). Testato su :4610 incluse migrazione legacy e flusso 0/2→2/2→1/2.
+
 ### Sessione 11 lug 2026 (sera) — PROTOCOLLO MATCHING 2.0 (non ancora deployato)
 
 Da «struttura progetto 2.0 2.md» (protocollo operativo di matching tecnico):
