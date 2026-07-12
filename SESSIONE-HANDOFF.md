@@ -28,6 +28,16 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 12 lug 2026 (pomeriggio) — Account gestiti dall'app (⚠️ RIPUBBLICARE LE REGOLE)
+
+- **Niente più script/claim per i nuovi utenti**: le regole Firestore ora autorizzano anche chi ha l'email nel documento `organizations/default/data/access` = { emails: { "email": "admin"|"operator" } }, che l'app scrive AUTOMATICAMENTE (solo admin) a ogni modifica degli Operatori HR (in remoteSync). I custom claims restano validi come override (l'admin storico continua a funzionare ed è il bootstrap del documento access).
+- **⚠️ AZIONE UTENTE**: ripubblicare `firestore.rules` in console (Firestore → Regole → incolla → Pubblica). Senza, i nuovi operatori senza claim non leggono nulla. CHIEDERE se fatto.
+- **«Crea account» in Impostazioni → Operatori** (icona 🔑, solo admin+cloud, serve email nella scheda): modale con password provvisoria, crea l'utenza Firebase Auth via app secondaria (`firebase.initializeApp(config, 'acct_...')`) senza toccare la sessione dell'admin. Email già esistente = ok (l'operatore accede direttamente).
+- **«Password dimenticata?»** sulla schermata di login (sendPasswordResetEmail).
+- Flussi possibili per un nuovo operatore: (a) admin crea l'account e consegna la password provvisoria; (b) auto-registrazione col pulsante Registrati usando la STESSA email della scheda; (c) Google con quella email. In tutti i casi l'accesso è deciso dall'elenco Operatori HR.
+- Manuale §2 riscritto (IT/EN/ES). Lo script `scripts/set-admin-claim.js` resta come via d'emergenza ma non è più necessario.
+- NOTA rinomina operatori: cambiare il NOME di una scheda non aggiorna il campo `hrReferent` dei candidati esistenti (stringa semplice): va corretto sulle singole pratiche.
+
 ### Sessione 12 lug 2026 — Ritocchi UI + numero infermieri (non ancora deployato)
 
 - **Anagrafica**: fase corrente e consenso privacy spostati come chips accanto al nome nell'intestazione (con pulsantino stampa modulo); rimossi dalla scheda "Dati anagrafici".

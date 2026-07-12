@@ -11,9 +11,29 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
-    // Role comes from a Firebase custom claim, set server-side (see scripts/set-admin-claim.js).
+    // Role via Firebase custom claim, set server-side (see scripts/set-admin-claim.js).
+    // Still honored, but no longer required: see the access map below.
     function isAdmin() { return isSignedIn() && request.auth.token.role == 'admin'; }
     function isOperator() { return isSignedIn() && (request.auth.token.role == 'operator' || isAdmin()); }
+
+    // ---- Access map (managed from the app, no server script needed) ----
+    // organizations/{org}/data/access holds { emails: { "person@x.com": "admin"|"operator" } },
+    // written by the app whenever an admin edits the HR operators list. A signed-in user
+    // whose login email appears there is authorized with that role. Custom claims keep
+    // working as an override (and are what bootstrapped the first admin).
+    function accessData(orgId) {
+      return get(/databases/$(database)/documents/organizations/$(orgId)/data/access).data;
+    }
+    function inAccess(orgId) {
+      return isSignedIn()
+        && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/organizations/$(orgId)/data/access)
+        && request.auth.token.email.lower() in accessData(orgId).emails;
+    }
+    function canOperate(orgId) { return isOperator() || inAccess(orgId); }
+    function canAdminOrg(orgId) {
+      return isAdmin() || (inAccess(orgId) && accessData(orgId).emails[request.auth.token.email.lower()] == 'admin');
+    }
 
     // ---- Per-user private workspace (the app's current data model) ----
     // Every user can read/write ONLY their own document. No one else, and no
@@ -32,20 +52,25 @@ service cloud.firestore {
     //                   everyone reads, ONLY admins write. This is what makes the
     //                   admin/operator distinction real and unbypassable.
     match /organizations/{orgId}/data/cases {
-      allow read:  if isOperator();
-      allow write: if isOperator() && request.resource.size() < 1048576;
+      allow read:  if canOperate(orgId);
+      allow write: if canOperate(orgId) && request.resource.size() < 1048576;
     }
     match /organizations/{orgId}/data/settings {
-      allow read:  if isOperator();
-      allow write: if isAdmin() && request.resource.size() < 1048576;
+      allow read:  if canOperate(orgId);
+      allow write: if canAdminOrg(orgId) && request.resource.size() < 1048576;
+    }
+    // The access map itself: everyone in the team can read it, only admins write it.
+    match /organizations/{orgId}/data/access {
+      allow read:  if canOperate(orgId);
+      allow write: if canAdminOrg(orgId) && request.resource.size() < 1048576;
     }
 
     // ---- Document files stored in Firestore (free plan, no Firebase Storage) ----
     // Each uploaded file is split into base64 chunks of < 1 MB, one document per
     // chunk. Same access rules as the case data they belong to.
     match /organizations/{orgId}/files/{chunkId} {
-      allow read, delete: if isOperator();
-      allow create, update: if isOperator() && request.resource.size() < 1048576;
+      allow read, delete: if canOperate(orgId);
+      allow create, update: if canOperate(orgId) && request.resource.size() < 1048576;
     }
     match /nurseflow/{userId}/files/{chunkId} {
       allow read, delete: if isOwner(userId);
