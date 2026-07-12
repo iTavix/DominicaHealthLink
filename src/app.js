@@ -10,6 +10,8 @@ import 'firebase/compat/storage';
 import { createIcons, icons as lucideIcons } from 'lucide';
 import { STEP_I18N, CHECKLIST_I18N, I18N } from './i18n-data.js';
 import { guideToc, guideBody } from './guide-content.js';
+// Hashed by Vite: replacing the logo file changes the URL, so no cache (SW or browser) can serve a stale copy.
+import logoUrl from './logo_dhl_nurses.png';
 
 // Shim with the same shape as the old lucide UMD global: lucide.createIcons().
 const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(opts || {}) }) };
@@ -53,6 +55,19 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // True while the initial Firestore read is in flight. Blocks the debounced cloud sync so a
   // stale locally-cached state can never be pushed over fresher team data during startup.
   let remoteLoading = false;
+  // ---------- Realtime shared-workspace sync ----------
+  // Cloud save status surfaced in the header chip: 'idle' | 'saving' | 'saved' | 'error' | 'offline'.
+  let syncStatus = 'idle', syncErrorMsg = '';
+  // Firestore onSnapshot unsubscribe handles (attached after login, released on logout).
+  let unsubCases = null, unsubSettings = null;
+  // Canonical JSON of every record as last CONFIRMED by the cloud (id → stableJson). Records whose
+  // local JSON differs are "dirty" (edited here, not yet pushed): a remote snapshot must not
+  // overwrite them. This turns the whole-array write into a per-record last-writer-wins merge.
+  let lastSynced = { nurses: {}, requests: {}, settingsJson: '' };
+  let remoteRenderTimer = null, lastRemoteToastAt = 0, sizeWarnShown = false;
+  // Cap on per-nurse activity-log entries: keeps the single shared Firestore document
+  // (hard limit ~1 MiB) from growing unbounded as cases accumulate history.
+  const MAX_LOG_ENTRIES = 80;
 
   function firebaseConfigured() {
     return typeof firebase !== 'undefined' && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.trim().length > 0;
@@ -441,6 +456,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         n.checklist = makeChecklist({ __current: n.currentStep });
       }
       PERSONAL_FIELDS.forEach((k) => { if (n[k] === undefined) n[k] = ''; });
+      // Trim histories saved before the log cap existed (see MAX_LOG_ENTRIES).
+      if (Array.isArray(n.logs) && n.logs.length > MAX_LOG_ENTRIES) n.logs.length = MAX_LOG_ENTRIES;
       // Structured clinical specialisations + matching assignment (matching protocol).
       if (!Array.isArray(n.specializations)) n.specializations = [];
       if (n.matchedRequestId === undefined) n.matchedRequestId = null;
@@ -474,11 +491,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         // Shared team workspace: cases and settings live in SEPARATE documents with
         // different permissions (operators write cases; only admins write settings).
         const data = db.collection('organizations').doc(ORG_ID).collection('data');
-        data.doc('cases').set({ nurses: state.nurses, requests: state.requests || [], updatedAt: serverTs() }, { merge: true })
-          .catch((err) => console.warn('Sync casi fallita:', err && err.message));
+        const payload = { nurses: state.nurses, requests: state.requests || [], updatedAt: serverTs() };
+        warnIfNearSizeLimit(payload);
+        setSyncStatus('saving');
+        // Snapshot what we are writing NOW: on success it becomes the new cloud baseline.
+        const writtenNurses = snapshotMap(state.nurses);
+        const writtenRequests = snapshotMap(state.requests || []);
+        data.doc('cases').set(payload, { merge: true })
+          .then(() => { lastSynced.nurses = writtenNurses; lastSynced.requests = writtenRequests; setSyncStatus('saved'); })
+          .catch((err) => setSyncError(t('sync_ctx_cases'), err));
         if (isAdmin()) {
+          const settingsJson = stableJson(state.settings);
           data.doc('settings').set({ settings: state.settings, updatedAt: serverTs() }, { merge: true })
-            .catch((err) => console.warn('Sync impostazioni fallita:', err && err.message));
+            .then(() => { lastSynced.settingsJson = settingsJson; })
+            .catch((err) => setSyncError(t('sync_ctx_settings'), err));
           // Access map: keeps Firestore authorization aligned with the HR operators
           // list, so accounts work without server-side custom claims.
           const emails = {};
@@ -487,14 +513,144 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             if (em) emails[em] = o.accessRole === 'admin' ? 'admin' : 'operator';
           });
           data.doc('access').set({ emails: emails, updatedAt: serverTs() })
-            .catch((err) => console.warn('Sync accessi fallita:', err && err.message));
+            .catch((err) => setSyncError(t('sync_ctx_access'), err));
         }
       } else {
+        setSyncStatus('saving');
         db.collection('nurseflow').doc(currentUser.uid)
           .set({ state: state, updatedAt: serverTs() }, { merge: true })
-          .catch((err) => console.warn('Firestore sync fallita:', err && err.message));
+          .then(() => setSyncStatus('saved'))
+          .catch((err) => setSyncError(t('sync_ctx_cases'), err));
       }
-    } catch (e) { console.warn('Sync error:', e && e.message); }
+    } catch (e) { setSyncError(t('sync_ctx_cases'), e); }
+  }
+
+  // Canonical JSON with sorted object keys: lets two copies of the same record compare equal
+  // regardless of the property order Firestore returns.
+  function stableJson(v) {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v) || 'null';
+    if (Array.isArray(v)) return '[' + v.map(stableJson).join(',') + ']';
+    return '{' + Object.keys(v).sort().filter((k) => v[k] !== undefined)
+      .map((k) => JSON.stringify(k) + ':' + stableJson(v[k])).join(',') + '}';
+  }
+  function snapshotMap(arr) {
+    const m = {};
+    (arr || []).forEach((x) => { if (x && x.id) m[x.id] = stableJson(x); });
+    return m;
+  }
+  // Per-record merge of a remote array into the local one. A record is kept LOCAL only when it
+  // was changed here after the last cloud confirmation (dirty); everything else follows the
+  // cloud. New records survive from both sides; deletions propagate unless the other side
+  // modified the record in the meantime (conservative: modified wins over deleted).
+  function mergeRecords(localArr, remoteArr, syncedMap) {
+    const localById = {};
+    (localArr || []).forEach((x) => { if (x && x.id) localById[x.id] = x; });
+    const out = [], seen = {};
+    (remoteArr || []).forEach((rx) => {
+      if (!rx || !rx.id) return;
+      seen[rx.id] = true;
+      const rJson = stableJson(rx);
+      const lx = localById[rx.id];
+      if (!lx) {
+        // Not present locally: new from another operator — unless we deleted it here and the
+        // cloud copy is unchanged (our pending delete will remove it from the cloud too).
+        if (syncedMap[rx.id] !== rJson) { out.push(rx); syncedMap[rx.id] = rJson; }
+      } else if (stableJson(lx) === syncedMap[rx.id]) {
+        out.push(rx); syncedMap[rx.id] = rJson;      // local untouched → follow the cloud
+      } else {
+        out.push(lx);                                 // local dirty → keep ours (push will follow)
+      }
+    });
+    (localArr || []).forEach((lx) => {
+      if (!lx || !lx.id || seen[lx.id]) return;
+      if (syncedMap[lx.id] === undefined || syncedMap[lx.id] !== stableJson(lx)) out.push(lx);
+      else delete syncedMap[lx.id];                   // deleted on the cloud, untouched here → drop
+    });
+    return out;
+  }
+  function attachRealtimeSync() {
+    if (!(fbEnabled && currentUser && db && SHARED_WORKSPACE)) return;
+    detachRealtimeSync();
+    const data = db.collection('organizations').doc(ORG_ID).collection('data');
+    // hasPendingWrites skips the local echo of our own writes; remoteLoading skips snapshots
+    // racing the initial full read.
+    unsubCases = data.doc('cases').onSnapshot((snap) => {
+      if (remoteLoading || !snap.exists || snap.metadata.hasPendingWrites) return;
+      const d = snap.data() || {};
+      applyRemoteCases(Array.isArray(d.nurses) ? d.nurses : [], Array.isArray(d.requests) ? d.requests : []);
+    }, (err) => setSyncError(t('sync_ctx_listen'), err));
+    unsubSettings = data.doc('settings').onSnapshot((snap) => {
+      if (remoteLoading || !snap.exists || snap.metadata.hasPendingWrites) return;
+      const d = snap.data() || {};
+      if (d.settings) applyRemoteSettings(d.settings);
+    }, () => { /* settings listener is best-effort */ });
+  }
+  function detachRealtimeSync() {
+    if (unsubCases) { try { unsubCases(); } catch (e) { /* ignore */ } unsubCases = null; }
+    if (unsubSettings) { try { unsubSettings(); } catch (e) { /* ignore */ } unsubSettings = null; }
+  }
+  function applyRemoteCases(remoteNurses, remoteRequests) {
+    // Normalize the incoming records with the same pipeline as local ones, so the
+    // stableJson comparisons in mergeRecords never trip on backfilled fields.
+    normalizeState(Object.assign({}, state, { nurses: remoteNurses, requests: remoteRequests }));
+    const beforeN = stableJson(state.nurses), beforeR = stableJson(state.requests || []);
+    state.nurses = mergeRecords(state.nurses, remoteNurses, lastSynced.nurses);
+    state.requests = mergeRecords(state.requests || [], remoteRequests, lastSynced.requests);
+    state.nurses.forEach((n) => { n.status = deriveStatus(n); });
+    if (state.selectedNurseId && !getNurse(state.selectedNurseId)) {
+      state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
+    }
+    if (stableJson(state.nurses) !== beforeN || stableJson(state.requests) !== beforeR) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* quota — ignore */ }
+      notifyRemoteUpdate();
+      safeRemoteRender();
+    }
+  }
+  function applyRemoteSettings(remoteSettings) {
+    normalizeState(Object.assign({}, state, { settings: remoteSettings }));
+    const remoteJson = stableJson(remoteSettings);
+    const localJson = stableJson(state.settings);
+    if (remoteJson === localJson) { lastSynced.settingsJson = remoteJson; return; }
+    // An admin with unsaved local settings edits keeps them (their push will follow).
+    if (lastSynced.settingsJson && localJson !== lastSynced.settingsJson) return;
+    state.settings = remoteSettings;
+    lastSynced.settingsJson = remoteJson;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* quota — ignore */ }
+    safeRemoteRender();
+  }
+  // Re-render triggered by REMOTE data: deferred while the operator is typing, has a modal
+  // open or is following the tour, so their in-progress work is never wiped by a redraw.
+  function safeRemoteRender() {
+    const ae = document.activeElement;
+    const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT');
+    if (typing || tour.active || document.getElementById('modal-layer')) {
+      clearTimeout(remoteRenderTimer);
+      remoteRenderTimer = setTimeout(safeRemoteRender, 2500);
+      return;
+    }
+    render();
+  }
+  function notifyRemoteUpdate() {
+    const now = Date.now();
+    if (now - lastRemoteToastAt < 30000) return;
+    lastRemoteToastAt = now;
+    showToast(t('sync_remote_update'), 'info', 3500);
+  }
+  function setSyncStatus(s) { syncStatus = s; updateSyncChip(); }
+  function setSyncError(ctx, err) {
+    const wasError = syncStatus === 'error';
+    syncStatus = 'error';
+    syncErrorMsg = ctx + ': ' + ((err && err.message) || err || '?');
+    console.warn('[sync]', syncErrorMsg);
+    updateSyncChip();
+    if (!wasError) showToast(t('sync_error_toast'), 'error', 6000);
+  }
+  // The Firestore document hard limit is ~1 MiB: warn the team well before writes start failing.
+  function warnIfNearSizeLimit(payload) {
+    if (sizeWarnShown) return;
+    let size = 0;
+    try { size = JSON.stringify(payload).length; } catch (e) { return; }
+    if (size > 850000) { sizeWarnShown = true; showToast(t('sync_size_warn'), 'warn', 9000); }
   }
 
   // ---------- Derived / computed selectors ----------
@@ -548,6 +704,14 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const op = currentOperator();
     return op && (op.team === 'rd' || op.team === 'it') ? op.team : null;
   }
+  // Display name of whoever is actually using the app right now — recorded as the author of
+  // every log entry (audit trail: notes, approvals, phase advances, matches).
+  function actorName() {
+    const op = currentOperator();
+    if (op && op.name) return op.name;
+    if (fbEnabled && currentUser) return currentUser.displayName || currentUser.email || t('log_author_op');
+    return localOperatorName() || t('log_author_op');
+  }
   // Operational split between the two teams. Admins and operators WITHOUT an
   // assigned team keep full access (backward compatible); a team-assigned
   // operator works only the phases of their own team.
@@ -595,7 +759,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (requestFull(r)) r.status = 'matched';
     n.matchedRequestId = r.id; n.matchedDepartment = r.department || '';
     n.employer = r.employer;
-    pushLog(n, 'system', t('log_author_system'), t('log_matched', { s: r.employer, r: r.department || '—' }));
+    pushLog(n, 'system', actorName(), t('log_matched', { s: r.employer, r: r.department || '—' }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     closeModal();
     commit();
@@ -607,7 +771,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const n = getNurse(nurseId);
     if (n) {
       n.matchedRequestId = null; n.matchedDepartment = '';
-      pushLog(n, 'alert', t('log_author_system'), t('log_unmatched', { s: r.employer, r: r.department || '—' }));
+      pushLog(n, 'alert', actorName(), t('log_unmatched', { s: r.employer, r: r.department || '—' }));
       n.lastUpdate = new Date().toISOString().slice(0, 10);
     }
     r.matched = r.matched.filter((m) => m.id !== nurseId);
@@ -731,7 +895,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d) return;
     d.status = 'approved';
     if (!d.uploadDate) d.uploadDate = new Date().toISOString().slice(0, 10);
-    pushLog(n, 'system', t('log_author_system'), t('log_doc_approved', { x: d.name }));
+    pushLog(n, 'system', actorName(), t('log_doc_approved', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
@@ -741,7 +905,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     d.status = 'missing'; d.uploadDate = null;
     deleteStoredFile(d);
     d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null; d.fileTooBig = false;
-    pushLog(n, 'alert', t('log_author_system'), t('log_doc_deleted', { x: d.name }));
+    pushLog(n, 'alert', actorName(), t('log_doc_deleted', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
@@ -750,7 +914,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const n = getNurse(nurseId); const d = n.documents.find((x) => x.id === docId); if (!d || d.status === status) return;
     if (status === 'approved') { approveDoc(nurseId, docId); return; }
     d.status = status;
-    pushLog(n, 'system', t('log_author_system'), t('log_doc_status', { x: d.name, s: docStatusLabel(status) }));
+    pushLog(n, 'system', actorName(), t('log_doc_status', { x: d.name, s: docStatusLabel(status) }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
@@ -759,7 +923,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     d.status = 'missing'; d.uploadDate = null;
     deleteStoredFile(d);
     d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null;
-    pushLog(n, 'alert', t('log_author_system'), t('log_doc_rejected', { x: d.name }));
+    pushLog(n, 'alert', actorName(), t('log_doc_rejected', { x: d.name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
@@ -870,7 +1034,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (!dataUrl || dataUrl.length > FILE_CHUNK_SIZE * FILE_MAX_CHUNKS) {
       // Even after compression the file exceeds what the free plan can hold.
       d.fileTooBig = true;
-      pushLog(n, 'alert', t('log_author_system'), t('log_file_too_big', { x: d.name }));
+      pushLog(n, 'alert', actorName(), t('log_file_too_big', { x: d.name }));
     } else if (fbEnabled && db && currentUser) {
       // Cloud mode without Firebase Storage: chunked copy inside Firestore, shared
       // with the whole team. The nurse record only stores the tiny reference.
@@ -880,7 +1044,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       } catch (err) {
         console.warn('Salvataggio file su Firestore fallito:', err && err.message);
         d.fileName = null; d.fileSize = null; d.uploadDate = null; d.status = 'missing';
-        pushLog(n, 'alert', t('log_author_system'), t('log_upload_cloud_failed', { x: d.name }));
+        pushLog(n, 'alert', actorName(), t('log_upload_cloud_failed', { x: d.name }));
         n.lastUpdate = new Date().toISOString().slice(0, 10);
         commit();
         return;
@@ -888,14 +1052,14 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     } else {
       // Local demo mode: embed in localStorage (small files only, quota permitting).
       if (dataUrl.length <= 2 * 1024 * 1024) d.fileUrl = dataUrl;
-      else { d.fileTooBig = true; pushLog(n, 'alert', t('log_author_system'), t('log_file_too_big', { x: d.name })); }
+      else { d.fileTooBig = true; pushLog(n, 'alert', actorName(), t('log_file_too_big', { x: d.name })); }
     }
-    pushLog(n, 'note', t('log_author_system'), t('log_doc_uploaded', { x: d.name }));
+    pushLog(n, 'note', actorName(), t('log_doc_uploaded', { x: d.name }));
     // Uploading the signed privacy form marks the consent as acquired on the record.
     if ((d.name || '').toLowerCase().indexOf('consenso privacy') >= 0 && !n.privacyConsent) {
       n.privacyConsent = true;
       n.privacyConsentDate = new Date().toISOString().slice(0, 10);
-      pushLog(n, 'system', t('log_author_system'), t('log_privacy_acquired'));
+      pushLog(n, 'system', actorName(), t('log_privacy_acquired'));
     }
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
@@ -920,18 +1084,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     n.currentStep += 1;
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     const to = n.currentStep >= DONE_STEP ? t('state_done') : stepName(n.currentStep);
-    pushLog(n, 'system', t('log_author_system'), t('log_advanced', { from: from, to: to }));
+    pushLog(n, 'system', actorName(), t('log_advanced', { from: from, to: to }));
     commit();
   }
 
   function pushLog(nurse, type, author, text) {
     nurse.logs.unshift({ id: uid(), at: new Date().toISOString(), type, author, text });
+    // Oldest entries fall off the end: the shared Firestore document must stay under ~1 MiB.
+    if (nurse.logs.length > MAX_LOG_ENTRIES) nurse.logs.length = MAX_LOG_ENTRIES;
   }
   function addLog(nurseId, type, text) {
     const n = getNurse(nurseId);
     const clean = (text || '').trim();
     if (!clean) return;
-    pushLog(n, type, n.hrReferent || t('log_author_op'), clean);
+    pushLog(n, type, actorName(), clean);
     commit();
   }
 
@@ -971,6 +1137,23 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     return wrap;
   }
   function closeModal() { const m = document.getElementById('modal-layer'); if (m) m.remove(); }
+
+  // ---------- Toast notifications (sync errors, remote updates, warnings) ----------
+  function showToast(msg, tone, ms) {
+    let layer = document.getElementById('toast-layer');
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'toast-layer';
+      layer.className = 'pointer-events-none fixed bottom-4 left-1/2 z-[95] flex w-full max-w-md -translate-x-1/2 flex-col items-center gap-2 px-4';
+      document.body.appendChild(layer);
+    }
+    const tones = { error: 'bg-rose-600 text-white', warn: 'bg-amber-500 text-white', info: 'bg-slate-800 text-white', ok: 'bg-emerald-600 text-white' };
+    const el = document.createElement('div');
+    el.className = 'pointer-events-auto w-full rounded-xl px-4 py-3 text-center text-sm font-semibold shadow-2xl animate-fadeIn ' + (tones[tone] || tones.info);
+    el.textContent = msg;
+    layer.appendChild(el);
+    setTimeout(() => { el.remove(); const l = document.getElementById('toast-layer'); if (l && !l.children.length) l.remove(); }, ms || 4500);
+  }
   function fieldVal(id) { const e = document.getElementById(id); return e ? e.value.trim() : ''; }
   function inputField(id, label, ph, required, type) {
     return '<div>' +
@@ -1110,7 +1293,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       documents: defaultRequiredDocs(),
       checklist: makeChecklist({ __current: 1 }),
       relocation: { flight: null, housing: null, tutor: null, contractStatus: t('contract_none') },
-      logs: [{ id: uid(), at: new Date().toISOString(), type: 'system', author: t('log_author_system'), text: t('log_nurse_created') }],
+      logs: [{ id: uid(), at: new Date().toISOString(), type: 'system', author: actorName(), text: t('log_nurse_created') }],
     };
     state.nurses.unshift(nurse);
     state.selectedNurseId = nurse.id;
@@ -1165,6 +1348,13 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const n = getNurse(id); if (!n) return;
     if (!confirm(t('confirm_delete_nurse', { x: n.name }))) return;
     (n.documents || []).forEach((d) => deleteStoredFile(d));
+    // Release any facility-request slot held by this candidate: the seat becomes
+    // available again and a fully-staffed request reopens.
+    (state.requests || []).forEach((r) => {
+      if (!(r.matched || []).some((m) => m.id === id)) return;
+      r.matched = r.matched.filter((m) => m.id !== id);
+      if (r.status === 'matched' && !requestFull(r)) r.status = 'open';
+    });
     state.nurses = state.nurses.filter((x) => x.id !== id);
     if (state.selectedNurseId === id) state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
     editNurseId = null;
@@ -1344,7 +1534,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     }
     const lang = (document.getElementById('ad-lang') || {}).value || 'ES';
     n.documents.push({ id: uid(), name: name, language: lang, uploadDate: null, validity: fieldVal('ad-validity') || null, status: 'missing' });
-    pushLog(n, 'system', t('log_author_system'), t('log_doc_added', { x: name }));
+    pushLog(n, 'system', actorName(), t('log_doc_added', { x: name }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     closeModal();
     commit();
@@ -2841,6 +3031,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     else history.pushState(entry, '', '#' + v);
     _lastHistoryView = v;
   }
+  // Surface connectivity changes in the sync chip; flush pending changes on reconnect.
+  window.addEventListener('offline', () => { if (fbEnabled && currentUser) setSyncStatus('offline'); });
+  window.addEventListener('online', () => { if (fbEnabled && currentUser) remoteSync(); });
+
   window.addEventListener('popstate', (e) => {
     let v = (e.state && e.state.dhlView) || (location.hash || '').replace('#', '') || 'dashboard';
     if (APP_VIEWS.indexOf(v) < 0) v = 'dashboard';
@@ -2872,8 +3066,8 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     '<header class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">' +
       '<div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:px-5">' +
         '<div class="flex min-w-0 items-center gap-3">' +
-          '<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-200">' +
-            '<i data-lucide="heart-pulse" class="h-5 w-5"></i></div>' +
+          '<div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg shadow-indigo-200 ring-1 ring-slate-200">' +
+            '<img src="' + logoUrl + '" alt="DHL Nurses" class="h-9 w-9 object-contain" /></div>' +
           '<div class="min-w-0">' +
             '<h1 class="truncate text-base font-extrabold leading-tight text-slate-900">DHL Nurses</h1>' +
             '<p class="hidden truncate text-xs text-slate-500 sm:block">Trasferimento Infermieri · Rep. Dominicana → Italia</p>' +
@@ -2889,6 +3083,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '</nav>' +
         '</div>' +
         '<div class="relative ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">' +
+          syncChipHtml() +
           (riskCount > 0
             ? '<button data-action="show-risk" class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-100"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + t('at_risk', { n: riskCount }) + '</button>'
             : '<span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>' + t('no_risk') + '</span>') +
@@ -2905,6 +3100,35 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         '</div>' +
       '</div>' +
     '</header>';
+  }
+
+  // Cloud save status chip (cloud mode only): green = saved, amber = saving,
+  // red = NOT saved (click explains and retries), grey = offline.
+  function syncChipHtml() {
+    if (!(fbEnabled && currentUser)) return '';
+    let cls, icon, label, spin = '';
+    if (syncStatus === 'error') { cls = 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100'; icon = 'cloud-off'; label = t('sync_error'); }
+    else if (syncStatus === 'offline') { cls = 'bg-slate-100 text-slate-500 ring-slate-200'; icon = 'wifi-off'; label = t('sync_offline'); }
+    else if (syncStatus === 'saving') { cls = 'bg-amber-50 text-amber-600 ring-amber-200'; icon = 'refresh-cw'; label = t('sync_saving'); spin = ' animate-spin'; }
+    else { cls = 'bg-emerald-50 text-emerald-600 ring-emerald-200'; icon = 'cloud'; label = t('sync_saved'); }
+    return '<button id="sync-chip" data-action="sync-info" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition ' + cls + '" data-tip-pos="bottom" data-tooltip="' + escapeHtml(t('sync_tooltip')) + '">' +
+      '<i data-lucide="' + icon + '" class="h-3.5 w-3.5' + spin + '"></i><span class="hidden md:inline">' + label + '</span></button>';
+  }
+  // Patches just the chip in place: sync completions must not trigger a full re-render.
+  function updateSyncChip() {
+    const el = document.getElementById('sync-chip');
+    if (!el) return;
+    const html = syncChipHtml();
+    if (!html) { el.remove(); return; }
+    el.outerHTML = html;
+    lucide.createIcons();
+  }
+  function syncInfo() {
+    if (syncStatus === 'error') {
+      alert(t('sync_error_detail', { x: syncErrorMsg || '—' }));
+      remoteSync(); // immediate retry
+    } else if (syncStatus === 'offline') alert(t('sync_offline_detail'));
+    else alert(t('sync_ok_detail'));
   }
 
   function userCluster() {
@@ -3618,7 +3842,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       '<div class="w-full max-w-md animate-fadeIn">' +
         '<div class="mb-4 flex justify-center">' + langSwitcher(true) + '</div>' +
         '<div class="mb-6 flex flex-col items-center text-center">' +
-          '<div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-xl shadow-indigo-900/40"><i data-lucide="heart-pulse" class="h-7 w-7"></i></div>' +
+          '<div class="mb-3 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 shadow-xl shadow-indigo-900/40 ring-1 ring-white/20"><img src="' + logoUrl + '" alt="DHL Nurses" class="h-full w-full object-contain" /></div>' +
           '<h1 class="text-2xl font-extrabold text-white">DHL Nurses</h1>' +
           '<p class="mt-1 text-sm text-slate-300">' + t('login_subtitle') + '</p>' +
         '</div>' +
@@ -3713,12 +3937,19 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           try { hasCache = !!localStorage.getItem(STORAGE_KEY); } catch (e) { hasCache = false; }
           if (hasCache) {
             render();
-            loadRemoteState().then(() => render());
+            loadRemoteState().then(() => { render(); attachRealtimeSync(); });
           } else {
             await loadRemoteState();
             render();
+            attachRealtimeSync();
           }
-        } else { render(); }
+        } else {
+          // Signed out: stop listening and forget the cloud baseline of the previous session.
+          detachRealtimeSync();
+          lastSynced = { nurses: {}, requests: {}, settingsJson: '' };
+          syncStatus = 'idle'; syncErrorMsg = '';
+          render();
+        }
       });
       return true;
     } catch (e) {
@@ -3746,6 +3977,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     } catch (e) {
       console.warn('Lettura Firestore fallita, uso cache locale:', e && e.message);
       state = loadState();
+      setSyncError(t('sync_ctx_load'), e);
     }
     remoteLoading = false;
     state.nurses.forEach((n) => { n.status = deriveStatus(n); });
@@ -3762,6 +3994,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (casesSnap.exists) state.requests = Array.isArray(casesSnap.data().requests) ? casesSnap.data().requests : [];
     if (settingsSnap.exists && settingsSnap.data().settings) state.settings = settingsSnap.data().settings;
     normalizeState(state);
+    // Cloud baseline for the per-record merge: everything just read is, by definition, in sync.
+    lastSynced.nurses = snapshotMap(state.nurses);
+    lastSynced.requests = snapshotMap(state.requests || []);
+    lastSynced.settingsJson = stableJson(state.settings);
     state.selectedNurseId = state.nurses[0] ? state.nurses[0].id : null;
     // First-run initialization: seed the shared docs (writes succeed only for an admin).
     if (!casesSnap.exists) data.doc('cases').set({ nurses: state.nurses, requests: state.requests || [], updatedAt: serverTs() }, { merge: true }).catch(() => {});
@@ -3954,6 +4190,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'reopen-request': reopenRequest(t.getAttribute('data-id')); break;
       case 'delete-entity': deleteEntity(t.getAttribute('data-type'), t.getAttribute('data-id')); break;
       case 'set-demo-role': setDemoRole(t.getAttribute('data-role')); break;
+      case 'sync-info': syncInfo(); break;
     }
     // Any action selected from the mobile tools dropdown should close it.
     const _m2 = document.getElementById('hdr-tools');

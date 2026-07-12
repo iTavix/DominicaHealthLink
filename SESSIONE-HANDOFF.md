@@ -1,7 +1,7 @@
 # DominicaHealthLink / DHL Nurses — Handoff sessione
 
 > File di contesto per aprire una nuova sessione di lavoro con Claude.
-> Aggiornato: 11 luglio 2026. Incolla o referenzia questo file all'avvio:
+> Aggiornato: 12 luglio 2026 (sera). Incolla o referenzia questo file all'avvio:
 > *"Leggi DominicaHealthLink/SESSIONE-HANDOFF.md e continua da lì: voglio [obiettivo]."*
 
 ---
@@ -13,12 +13,12 @@
 | Cartella | `~/Desktop/claude_code/DominicaHealthLink` | `~/Desktop/claude_code/demo_dhl_nurses` |
 | Repo | github.com/iTavix/DominicaHealthLink | github.com/iTavix/dhl-nurses-demo (pubblico) |
 | Live | itavix.github.io/DominicaHealthLink/ | itavix.github.io/dhl-nurses-demo/ |
-| Brand | DominicaHealthLink | **DHL Nurses** |
+| Brand | **DHL Nurses** (dal 12 lug; cartella/repo/URL restano DominicaHealthLink) | **DHL Nurses** |
 | Backend | Firebase Auth + Firestore (workspace condiviso) | Nessuno: demo locale permanente (apiKey vuota) |
 
 **Deploy**: push su `main` → GitHub Action builda Vite e pubblica `dist/` su Pages (~1 min). Mai caricare file dall'interfaccia web di GitHub. Credenziali git nel portachiavi macOS (token con permessi Contents+Workflows).
 
-**La demo è una copia divergente**: le feature nuove del gestionale NON ci arrivano da sole — vanno riportate a mano se serve. La demo ha in più: welcome page con carosello automatico 6 slide, 6 candidati fittizi (step 2,3,5,8,9,11), banner da presentazione, brand DHL Nurses.
+**La demo è una copia divergente**: le feature nuove del gestionale NON ci arrivano da sole — vanno riportate (patch del diff di produzione + adattamenti). La demo ha in più: welcome page a schermo intero (logo, claim, carosello 6 slide con anteprime SVG delle schermate), 6 candidati fittizi (fasi 2,3,4,6,7,completata), banner da presentazione. ⚠️ Il suo `styles.css` ha stili esclusivi (#welcome-overlay, .wl-slide, .wl-dot): MAI sovrascriverlo con quello di produzione (il 12 lug ha rotto la welcome). Al 12 lug sera demo e produzione sono ALLINEATE su tutto.
 
 ## 2. Stack e struttura (identica nei due repo)
 
@@ -27,6 +27,30 @@
 - Comandi: `npm run dev` / `build` / `preview` (preview prod: porta 4599 = launch `nurseflow`; demo: 4601 = `dhldemo`)
 
 ## 3. Funzionalità implementate
+
+### Sessione 12 lug 2026 (notte) — Logo + robustezza sync multi-operatore (non ancora deployata)
+
+Corretti i punti 1–5 del report "cosa manca" (vedi log conversazione):
+- **Logo ufficiale** (`src/logo_dhl_nurses.png`, 512px, importato con nome hashato come in demo) al posto del cuoricino lucide nell'header e nella schermata di login. Originale 1254px alla radice del progetto.
+- **Sync in tempo reale** (`attachRealtimeSync`, `onSnapshot` su cases+settings): le modifiche di un operatore arrivano subito agli altri. **Merge per-record** (`mergeRecords` + mappa `lastSynced` di stableJson): niente più sovrascrittura dell'intero array; conflitto sullo STESSO candidato = vince l'ultimo (per-record), candidati diversi = entrambe le modifiche sopravvivono. Delete propagate; modifica batte delete (conservativo). Logica testata con 8 scenari standalone in Node. Il re-render da dati remoti è "sicuro" (`safeRemoteRender`): rinviato se c'è una modale aperta, il tour attivo o un campo col focus.
+- **Chip stato sync nell'header** (solo cloud): verde Salvato / ambra Salvataggio… / rosso NON salvato (clic = dettaglio errore + retry) / grigio Offline. Toast (`showToast`) su errori di salvataggio, aggiornamenti ricevuti da altri operatori (throttle 30s) e archivio quasi pieno. Eventi window online/offline collegati.
+- **Eliminazione candidato** ora libera i posti nelle richieste di matching (`deleteNurse` pulisce `r.matched`, richiesta piena → torna Aperta). Verificato in demo locale.
+- **Autore reale nel log**: `actorName()` (operatore corrente per email in cloud, nome locale in demo) sostituisce "Sistema"/referente HR in TUTTI i pushLog (approvazioni, avanzamenti, abbinamenti, note, creazione candidato). Verificato in demo.
+- **Cap log**: max 80 voci per candidato (`MAX_LOG_ENTRIES`, potatura in pushLog + normalizeState) + avviso toast quando il doc condiviso supera ~850 KB (limite Firestore 1 MiB).
+- Nuove chiavi i18n `sync_*` in IT/EN/ES.
+- **Trasloco hosting futuro** (Firebase RESTA): la build è già portabile (`base: './'` in vite.config, manifest/SW relativi). Al cambio dominio servirà SOLO: (1) Firebase console → Authentication → Settings → Authorized domains → aggiungere il nuovo dominio; (2) pubblicare `dist/` sul nuovo hosting. Nessuna modifica al codice.
+- NOTA: il manuale in-app NON documenta ancora il chip di sync (da fare in un prossimo giro se richiesto).
+
+### Sessione 12 lug 2026 (sera) — Brand, UI e Guida (tutto online)
+
+- **Brand «DHL Nurses»** anche in produzione: header, login, splash, titolo pagina, manifest PWA, manuale/guida IT-EN-ES.
+- **Dashboard**: chip col nome dell'operatore al lavoro + team (da Operatori HR via email; nome locale in demo) accanto a Esporta CSV.
+- **Tema scuro sistemato**: override CSS per le tinte accento (indigo/emerald/amber/rose/sky: testi -600/700/800, fondini -100, ring, bordi, bg-white/70) — prima chips/badge/bande team erano verde-su-verde e blu-su-blu. Tema chiaro invariato. Ogni NUOVO componente colorato va verificato in entrambi i temi.
+- **Tour interattivo a 10 passi**: testi arricchiti e Matching integrato come passo 6 (dopo il racconto delle 9 fasi, con frasi di raccordo), non più in coda; salto di vista Gestione Pratiche → Matching → ritorno.
+- **Manuale**: sezione 6.1 con «Come viene costruita la rosa» (pool, idoneo/parziale, punteggio 100/60 +8 +5 +4, stati richiesta), procedura 7 passo-passo del matching, 2 FAQ nuove; §2 riscritto coi tre modi di accesso.
+- **Demo**: welcome page ripristinata (era sparita per il CSS sovrascritto) + anteprime SVG inline delle schermate nelle 6 slide; logo nuovo (cuore tricolore) importato da src/ con nome hashato = niente cache stantia.
+- Creato **PROGETTO-CLAUDE-DHL-NURSES.md** (nella cartella): istruzioni + conoscenza per un Progetto su claude.ai. Non ancora committato.
+
 
 ### Sessione 12 lug 2026 (pomeriggio) — Account gestiti dall'app (⚠️ RIPUBBLICARE LE REGOLE)
 
@@ -85,10 +109,13 @@ Implementata la struttura di «struttura progetto.md»: il workflow è passato d
 
 ## 4. ⚠️ Cose in sospeso / da verificare a inizio sessione
 
-- [ ] **Regole Firestore da ripubblicare in console** (Firestore → Regole → incolla `firestore.rules` → Pubblica): senza, gli upload in produzione vengono annullati con avviso nel log. CHIEDERE se è stato fatto.
-- [ ] Verificare che `itavix.github.io` sia negli **Authorized domains** di Firebase Auth (serve per il login Google dal sito pubblicato).
-- [ ] Eventuali dati con file base64 incorporati caricati PRIMA del passaggio ai chunk: se la sync del team desse problemi di dimensione, migrare/ricaricare quei file.
+- [x] Regole Firestore con access map ripubblicate in console + scheda operatore risalvata: confermato dall'utente il 12 lug (sera).
+- [ ] La sync in tempo reale coi due operatori REALI non è mai stata provata in produzione (testata solo la logica di merge in locale): alla prima occasione aprire l'app su due dispositivi/finestre loggati e verificare che le modifiche si vedano a vicenda e che il chip resti verde.
+- [ ] Verificare l'accesso reale di un nuovo operatore (creato col pulsante 🔑 o auto-registrato): mai testato end-to-end in produzione.
 - [ ] Modulo privacy: il punto "1. Titolare del trattamento" è generico — inserire ragione sociale/contatti reali quando l'utente li fornisce.
+- [ ] `PROGETTO-CLAUDE-DHL-NURSES.md` non è committato: includerlo nel prossimo giro di deploy se l'utente vuole versionarlo.
+- [x] Authorized domains e prime regole Firestore: confermati fatti dall'utente l'11-12 lug.
+- Nota: eventuali file base64 incorporati caricati PRIMA del passaggio ai chunk — migrare/ricaricare solo se la sync del team desse problemi di dimensione.
 
 ## 5. Come lavorare con questo utente (imparato sul campo)
 
