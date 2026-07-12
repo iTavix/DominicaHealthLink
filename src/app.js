@@ -592,6 +592,9 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     // Normalize the incoming records with the same pipeline as local ones, so the
     // stableJson comparisons in mergeRecords never trip on backfilled fields.
     normalizeState(Object.assign({}, state, { nurses: remoteNurses, requests: remoteRequests }));
+    // Detect facility-request events from ANOTHER operator (own writes are skipped upstream by
+    // hasPendingWrites), so the matching team is alerted to new and just-filled requests.
+    alertRemoteRequestEvents(state.requests || [], remoteRequests);
     const beforeN = stableJson(state.nurses), beforeR = stableJson(state.requests || []);
     state.nurses = mergeRecords(state.nurses, remoteNurses, lastSynced.nurses);
     state.requests = mergeRecords(state.requests || [], remoteRequests, lastSynced.requests);
@@ -604,6 +607,22 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       notifyRemoteUpdate();
       safeRemoteRender();
     }
+  }
+  // Compare the requests we hold against the incoming remote copy and toast the two events
+  // the matching team cares about: a brand-new request, and one that just became fully staffed.
+  // At most two toasts per snapshot, so a bulk change can't flood the screen.
+  function alertRemoteRequestEvents(localReqs, remoteReqs) {
+    const byId = {};
+    localReqs.forEach((r) => { if (r && r.id) byId[r.id] = r; });
+    let created = 0, filled = 0, lastCreated = null, lastFilled = null;
+    remoteReqs.forEach((rr) => {
+      if (!rr || !rr.id) return;
+      const lr = byId[rr.id];
+      if (!lr) { created++; lastCreated = rr; }
+      else if (lr.status !== 'matched' && rr.status === 'matched') { filled++; lastFilled = rr; }
+    });
+    if (lastCreated) showToast(created > 1 ? t('toast_req_created_many', { n: created }) : t('toast_req_created', { s: requestLabel(lastCreated), n: lastCreated.quantity || 1 }), 'info', 5000);
+    if (lastFilled) showToast(filled > 1 ? t('toast_req_filled_many', { n: filled }) : t('toast_req_filled', { s: requestLabel(lastFilled), n: lastFilled.quantity || 1 }), 'ok', 6000);
   }
   function applyRemoteSettings(remoteSettings) {
     normalizeState(Object.assign({}, state, { settings: remoteSettings }));
@@ -755,13 +774,16 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (!r || !n || r.status !== 'open' || requestFull(r)) return;
     if (!confirm(t('mt_confirm_assign', { n: n.name, s: r.employer, r: r.department || '—' }))) return;
     r.matched.push({ id: n.id, name: n.name, at: new Date().toISOString().slice(0, 10) });
-    if (requestFull(r)) r.status = 'matched';
+    // This assignment can be the one that fills the last seat: flag it for the alert below.
+    const justFilled = requestFull(r);
+    if (justFilled) r.status = 'matched';
     n.matchedRequestId = r.id; n.matchedDepartment = r.department || '';
     n.employer = r.employer;
     pushLog(n, 'system', actorName(), t('log_matched', { s: r.employer, r: r.department || '—' }));
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     closeModal();
     commit();
+    if (justFilled) showToast(t('toast_req_filled', { s: requestLabel(r), n: r.quantity || 1 }), 'ok', 6000);
   }
   function unassignMatch(reqId, nurseId) {
     if (!canManageMatching()) return;
@@ -1956,22 +1978,29 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       shift: fieldVal('rq-shift'), notes: fieldVal('rq-notes'),
       requiredSkills: chipValues('rq-req'), preferredSkills: chipValues('rq-pref'),
     };
+    let toast = null;
     if (pendingRequestId) {
       const r = getRequest(pendingRequestId);
       if (r) {
+        const wasFull = requestFull(r);
         Object.assign(r, data);
         // Changing the headcount can complete or reopen the request.
         if (r.status !== 'closed') r.status = requestFull(r) ? 'matched' : 'open';
+        // Lowering the headcount to meet the matched count also "fills" it.
+        if (!wasFull && requestFull(r) && r.status === 'matched') toast = { msg: t('toast_req_filled', { s: requestLabel(r), n: r.quantity || 1 }), tone: 'ok' };
       }
     } else {
-      state.requests.push(Object.assign({
+      const nr = Object.assign({
         id: uid(), status: 'open', createdAt: new Date().toISOString().slice(0, 10),
         matched: [],
-      }, data));
+      }, data);
+      state.requests.push(nr);
+      toast = { msg: t('toast_req_created', { s: requestLabel(nr), n: nr.quantity || 1 }), tone: 'info' };
     }
     pendingRequestId = null;
     closeModal();
     commit();
+    if (toast) showToast(toast.msg, toast.tone, 5000);
   }
 
   // Candidate shortlist for a request: interrogazione → identificazione → validazione.
