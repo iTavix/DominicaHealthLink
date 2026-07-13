@@ -28,6 +28,10 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 13 lug 2026 — KPI richieste in dashboard (prod+demo, ONLINE)
+
+- Due nuove card KPI cliccabili in Dashboard → vista Matching: **«Richieste da Evadere»** (richieste `open`, sottotitolo coi posti ancora da coprire = somma quantity−matched) e **«Richieste Evase»** (`matched`+`closed`). `computeKpis` ora restituisce anche reqOpen/reqDone/reqSeats. Griglia KPI passata a `xl:grid-cols-4` (7 card = 4+3). Chiavi `kpi_req_*` IT/EN/ES; manuale §4.2 aggiornato nelle tre lingue. Verificato in prod locale (1/1, 2 posti) e demo (3/1, 3 posti — coerente col seed a 4 richieste).
+
 ### Sessione 12 lug 2026 (notte, 5ª parte) — Manuale in-app aggiornato a v1.1 (prod+demo, ONLINE)
 
 - Aggiornati i tre corpi del manuale (`manualBodyIT/EN/ES`) + versione header `manualHtml` (v1.0→v1.1), in produzione e demo (patch identica applicata pulita, il manuale era allineato).
