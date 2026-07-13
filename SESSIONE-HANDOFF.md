@@ -28,6 +28,14 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 13 lug 2026 (2ª parte) — Guida Normativa: sezione privacy Italia+Rep. Dominicana (prod+demo, ONLINE)
+
+- Nuova §10 «Protezione dei dati personali (Italia e Repubblica Dominicana)» in `src/guide-content.js`, nelle 3 lingue: copre la **Ley 172-13** dominicana (principi, diritti ARCO, habeas data, e il limite pratico — nessuna autorità di controllo indipendente dedicata, solo la Superintendencia de Bancos per i dati creditizi) e il regime italiano (**GDPR** + **Codice Privacy D.Lgs. 196/2003**/101/2018). Terza parte: la Rep. Dominicana **non ha una decisione di adeguatezza UE** (verificato via ricerca web, lista 2026 non la include) → il trasferimento dati si fonda sulle deroghe dell'**art. 49 GDPR** (consenso esplicito + misure precontrattuali), il che spiega perché il modulo di Consenso Privacy dell'app è la base giuridica del trasferimento, non solo buona prassi.
+- Aggiunte 6 fonti verificate (numerate 10-15 in `REFS`): testo ufficiale Ley 172-13 (Presidencia), RIPD (principi/ARCO/habeas data), GDPR su EUR-Lex, Codice Privacy coordinato (Garante), pagina Garante sui trasferimenti extra-UE, lista adeguatezza Commissione Europea.
+- Rinumerate le sezioni successive: Riferimenti operativi 10→11, Conclusioni 11→12, Fonti 12→13 (TOC + h2 + refsHtml, in IT/EN/ES).
+- Verificato in browser: nessun errore console, sezione e note a piè pagina renderizzate correttamente in tutte e 3 le lingue, sia in produzione che in demo (patch identica applicata pulita).
+- ⚠️ Non è consulenza legale: la sezione ha lo stesso taglio informativo del resto della guida (fonti ufficiali citate, nessun parere specifico). Se l'utente chiede dettagli operativi (es. clausole contrattuali standard, DPO da nominare) va indirizzato a un legale.
+
 ### Sessione 13 lug 2026 — KPI richieste in dashboard (prod+demo, ONLINE)
 
 - Due nuove card KPI cliccabili in Dashboard → vista Matching: **«Richieste da Evadere»** (richieste `open`, sottotitolo coi posti ancora da coprire = somma quantity−matched) e **«Richieste Evase»** (`matched`+`closed`). `computeKpis` ora restituisce anche reqOpen/reqDone/reqSeats. Griglia KPI passata a `xl:grid-cols-4` (7 card = 4+3). Chiavi `kpi_req_*` IT/EN/ES; manuale §4.2 aggiornato nelle tre lingue. Verificato in prod locale (1/1, 2 posti) e demo (3/1, 3 posti — coerente col seed a 4 richieste).
