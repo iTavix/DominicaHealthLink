@@ -28,6 +28,13 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 14 lug 2026 — Logo piattaforma cuore SVG (prod+demo, ONLINE) + ⚠️ nuova architettura demo
+
+- **⚠️ SCOPERTA — la demo è cambiata fuori sessione** (4 commit del 14 lug, altra sessione/lavoro utente): l'ingresso della demo è ora una **presentazione investor** (`index.html` riscritto, 12 fasi, nav Problema/Soluzione/…); il gestionale si è spostato su **`app.html`** (vite.config con 2 entry). Brand chiarito nel commit 18521bd: **DominicaHealthLink = società** (logo PNG quadrato), **DHL Nurses = piattaforma** (nuovo logo cuore). La presentazione referenzia `/src/logo_dhl_nurses.png` come logo società: quel PNG NON va rimosso dal repo demo (rimosso per errore durante il cambio logo, poi ripristinato).
+- **Nuovo logo piattaforma**: `logo_dhl_nurses_cuore.svg` (732 byte, tegola indigo arrotondata + cuore-battito bianco, fornito dall'utente nella cartella demo) copiato in `src/` di entrambi i repo; import in app.js aggiornato. L'SVG è già una tegola → **rimossi i riquadri bianchi** nei contenitori: header (img h-10 rounded-xl diretta), login (h-14 rounded-2xl), demo welcome bar (h-9) e hero (h-28/36 rounded-3xl). Vite lo inlina come data-URI. In produzione `src/logo_dhl_nurses.png` eliminato (non più referenziato); l'originale 1254px resta alla radice.
+- Verificato in entrambi i temi (prod header/login, demo presentazione + app.html landing), nessun errore console.
+- NB porta 4599 occupata da un processo esterno (probabile altra sessione): usata la config `nurseflow-4610` per i test.
+
 ### Sessione 13 lug 2026 (2ª parte) — Guida Normativa: sezione privacy Italia+Rep. Dominicana (prod+demo, ONLINE)
 
 - Nuova §10 «Protezione dei dati personali (Italia e Repubblica Dominicana)» in `src/guide-content.js`, nelle 3 lingue: copre la **Ley 172-13** dominicana (principi, diritti ARCO, habeas data, e il limite pratico — nessuna autorità di controllo indipendente dedicata, solo la Superintendencia de Bancos per i dati creditizi) e il regime italiano (**GDPR** + **Codice Privacy D.Lgs. 196/2003**/101/2018). Terza parte: la Rep. Dominicana **non ha una decisione di adeguatezza UE** (verificato via ricerca web, lista 2026 non la include) → il trasferimento dati si fonda sulle deroghe dell'**art. 49 GDPR** (consenso esplicito + misure precontrattuali), il che spiega perché il modulo di Consenso Privacy dell'app è la base giuridica del trasferimento, non solo buona prassi.
