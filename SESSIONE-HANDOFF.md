@@ -28,6 +28,31 @@
 
 ## 3. Funzionalità implementate
 
+### Sessione 15 lug 2026 (2ª parte) — Audit completo di correttezza: 6 fix + 3 scelte utente (prod+demo, ONLINE)
+
+Audit a due binari (test manuali UI di ogni inserimento + review agente di tutto il codice). Esito: impianto solido, 412 chiavi i18n identiche nelle 3 lingue, dispatcher senza orfani, sync/merge verificato in dettaglio. Trovati e corretti (commit prod b67b261):
+1. **🔴 Employer cancellato silenziosamente** — dati seed con employer «nome» semplice vs catalogo «nome · città»: select vuoto in Modifica (anagrafica E richiesta), salvataggio sovrascriveva il datore col default. Fix doppio: `selectField` conserva valori fuori catalogo (aggiunti come option) + **migrazione in normalizeState** che riallinea employer di nurse/request alla label composta (solo match univoci).
+2. `f_last` mancante (scheda stampabile mostrava la chiave grezza) → aggiunta IT/EN/ES.
+3. `openDocOverlay` non chiudeva la Scheda → overlay sovrapposti in stampa. Fix: `closeNurseSheet()` in catena.
+4. Backup senza `languageLevel` → crash del render (`.split` su undefined). Fix: backfill in normalizeState.
+5. **Riconciliazione referenziale** in normalizeState: abbinamenti verso richieste/candidati inesistenti (backup, merge parziali) ripuliti; stato open/matched riallineato; matchedRequestId azzerato anche se non speculare in `r.matched`. Testato iniettando dati corrotti.
+6. Guardie `if (!n) return` su getNurse in tutte le mutazioni (candidato cancellato da altro operatore + DOM stantìo).
+
+Scelte utente implementate:
+- **(a) Archivio**: righe VIRTUALI per scadenze passaporto/cédula (`allDocs`, badge «Dati anagrafici», niente azioni file), nei filtri Tutti/In scadenza → KPI e archivio ora coerenti.
+- **(b) Impostazioni multi-admin**: merge per-entità (`SETTINGS_COLLECTIONS`, `lastSynced.settings` per-record al posto di `settingsJson`) — stesso schema di nurses/requests; due admin non si sovrascrivono più. NON testabile end-to-end in locale (demo senza cloud): verificato build+logica, da provare col secondo operatore reale.
+- **(c) Rimozione abbinamento / eliminazione richiesta**: `n.employer` torna «Non assegnato» SOLO se coincideva con quello della richiesta (una modifica manuale post-abbinamento non viene toccata).
+
+Non fixato (riportato): reset di `sizeWarnShown`, disconnect di un IntersectionObserver del TOC (trascurabili).
+
+### Sessione 15 lug 2026 — Welcome demo a 12 fasi + coerenza presentazione (SOLO demo, ONLINE)
+
+- **Welcome/landing di app.html aggiornata al modello a 12 fasi** (era rimasta a «9 fasi»): titolo «Percorso guidato: 12 fasi, 2 team», testo e popup «Scopri di più» riscritti col racconto **12 = 3 accordi quadro «una tantum» (associazioni, aziende ospedaliere, alloggi/servizi) + 9 fasi operative per candidato**, in IT/EN/ES. Anteprima SVG della sezione: aggiunta fascia viola «3× ACCORDI QUADRO · UNA TANTUM» sopra i 9 nodi (3+9=12).
+- Stepper e tour ora dicono «9 fasi **operative**» (stepper_title, tour2, tour5 nelle 3 lingue): resta vero rispetto al software e si aggancia al racconto a 12 fasi.
+- **Presentazione (index.html) ripulita**: brand normalizzato «DHLNurses»→«DHL Nurses» (34 occorrenze), stat hero «12 Fasi operative»→«12 Fasi end-to-end» (le operative sono 9, il deck stesso marca 3 fasi UNA TANTUM), chip hero-card 10 «Arrivo & tutor»→«Arrivo, domicilio & tutor» (condensa le fasi 10-12), commento i18n aggiornato. Verificato: dizionari IT/EN/ES completi (116 chiavi ciascuno), link ./app.html ok, logo società PNG presente, nessun errore console.
+- **⚠️ DIVERGENZA APERTA (decisione utente)**: il gestionale (demo E produzione) implementa le 9 fasi operative col **Matching in fase 7, DOPO l'arrivo in Italia**; la presentazione investor dice che il **Matching (T.3) precede viaggio e contratto**. Se il nuovo protocollo è definitivo, il workflow del gestionale andrebbe riordinato (intervento grosso, anche in produzione). Il manuale in-app dice ancora «Le 9 fasi e i 2 team» (coerente col software attuale).
+- Build ok, testato su :4601 nelle 3 lingue. Deployato col commit b12c9d3 (Action verde, live verificato via curl: «Fasi end-to-end» presente, zero «DHLNurses»).
+
 ### Sessione 14 lug 2026 — Logo piattaforma cuore SVG (prod+demo, ONLINE) + ⚠️ nuova architettura demo
 
 - **⚠️ SCOPERTA — la demo è cambiata fuori sessione** (4 commit del 14 lug, altra sessione/lavoro utente): l'ingresso della demo è ora una **presentazione investor** (`index.html` riscritto, 12 fasi, nav Problema/Soluzione/…); il gestionale si è spostato su **`app.html`** (vite.config con 2 entry). Brand chiarito nel commit 18521bd: **DominicaHealthLink = società** (logo PNG quadrato), **DHL Nurses = piattaforma** (nuovo logo cuore). La presentazione referenzia `/src/logo_dhl_nurses.png` come logo società: quel PNG NON va rimosso dal repo demo (rimosso per errore durante il cambio logo, poi ripristinato).
