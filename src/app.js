@@ -152,7 +152,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   function legalRouteTag(key) { const r = legalRoute(key); return r ? r.code + ' — ' + r.name : key; }
   function legalCheckLabels(key) { const d = legalDict(); return d.checks[key] || LEGAL_I18N.it.checks[key] || []; }
   function defaultLegalPath() {
-    return { recognitionRoute: '', derogationRegion: '', permitRoute: '', entryDate: '', nullaOstaDate: '', checks: {} };
+    return { recognitionRoute: '', derogationRegion: '', permitRoute: '', entryDate: '', nullaOstaDate: '', checks: {}, docs: {} };
   }
   // Flags are stored by index per route key; the array is padded lazily so dictionary
   // growth in later versions never crashes older saved states.
@@ -161,6 +161,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     if (!Array.isArray(lp.checks[key])) lp.checks[key] = [];
     while (lp.checks[key].length < len) lp.checks[key].push(false);
     return lp.checks[key];
+  }
+  // Per-item attachments: lp.docs[routeKey][idx] holds the id of a record in n.documents,
+  // so a legal attachment is a normal document (preview, archive, expiry) that simply never
+  // gates the pipeline (optional: true). Returns null when the link is dangling — the record
+  // can be deleted from the documents table, which must not break this card.
+  function legalDoc(n, key, idx) {
+    const lp = nurseLegal(n);
+    const id = lp.docs && lp.docs[key] ? lp.docs[key][idx] : null;
+    if (!id) return null;
+    return (n.documents || []).find((d) => d.id === id) || null;
+  }
+  function legalDocLabel(key, idx) {
+    const r = legalRoute(key.replace('_emp', ''));
+    return (r ? r.code + ' · ' : '') + legalCheckLabels(key)[idx];
   }
 
   // Status badge metadata (colors fixed; labels localized via i18n).
@@ -552,6 +566,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         if (LEGAL_REC_ROUTES.indexOf(lp.recognitionRoute) < 0) lp.recognitionRoute = '';
         if (LEGAL_PERM_ROUTES.indexOf(lp.permitRoute) < 0) lp.permitRoute = '';
         if (!lp.checks || typeof lp.checks !== 'object' || Array.isArray(lp.checks)) lp.checks = {};
+        if (!lp.docs || typeof lp.docs !== 'object' || Array.isArray(lp.docs)) lp.docs = {};
       }
       if (!Array.isArray(n.documents)) n.documents = [];
       const docNames = n.documents.map((d) => (d.name || '').toLowerCase());
@@ -1058,11 +1073,19 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
+  // A legal-path attachment removed or rejected from the documents table must drop its tick
+  // too: the checklist may never claim an adempimento whose evidence is gone.
+  function untickLegalFor(n, d) {
+    if (!d || !d.legal) return;
+    const flags = legalFlags(nurseLegal(n), d.legal.route);
+    if (d.legal.idx < flags.length) flags[d.legal.idx] = false;
+  }
   // "Elimina" on an approved document: removes the uploaded file and frees the slot.
   function deleteDocFile(nurseId, docId) {
     const n = getNurse(nurseId); if (!n) return; // stale DOM: candidate removed by another operator
     const d = n.documents.find((x) => x.id === docId); if (!d) return;
     if (!canOperatePhase(n.currentStep)) return; // the other team's phase
+    untickLegalFor(n, d);
     d.status = 'missing'; d.uploadDate = null;
     deleteStoredFile(d);
     d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null; d.fileTooBig = false;
@@ -1085,6 +1108,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     const n = getNurse(nurseId); if (!n) return; // stale DOM: candidate removed by another operator
     const d = n.documents.find((x) => x.id === docId); if (!d) return;
     if (!canOperatePhase(n.currentStep)) return; // the other team's phase
+    untickLegalFor(n, d);
     d.status = 'missing'; d.uploadDate = null;
     deleteStoredFile(d);
     d.fileName = null; d.fileUrl = null; d.fileSize = null; d.fileStoragePath = null; d.fileStore = null;
@@ -1164,7 +1188,32 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   function triggerUpload(nurseId, docId) {
     const gn = getNurse(nurseId);
     if (gn && !canOperatePhase(gn.currentStep)) return; // the other team's phase
-    pendingUpload = { nurseId: nurseId, docId: docId };
+    openDocFilePicker({ nurseId: nurseId, docId: docId });
+  }
+  // Legal-path attachment: creates the linked document record on first upload, then reuses
+  // the normal picker. No team gate here — the regulatory file spans both teams (see §5.5).
+  function triggerLegalUpload(nurseId, routeKey, idx) {
+    const n = getNurse(nurseId); if (!n) return; // stale DOM: candidate removed by another operator
+    const labels = legalCheckLabels(routeKey);
+    if (!(idx >= 0 && idx < labels.length)) return;
+    const lp = nurseLegal(n);
+    if (!lp.docs) lp.docs = {};
+    if (!lp.docs[routeKey]) lp.docs[routeKey] = {};
+    let d = legalDoc(n, routeKey, idx);
+    if (!d) {
+      d = {
+        id: uid(), name: legalDocLabel(routeKey, idx), language: 'IT',
+        uploadDate: null, validity: null, status: 'missing',
+        optional: true,                       // never gates advancement nor "Missing Docs"
+        legal: { route: routeKey, idx: idx }, // back-link used to auto-tick on upload
+      };
+      n.documents.push(d);
+      lp.docs[routeKey][idx] = d.id;
+    }
+    openDocFilePicker({ nurseId: nurseId, docId: d.id });
+  }
+  function openDocFilePicker(ctx) {
+    pendingUpload = ctx;
     let input = document.getElementById('doc-file-input');
     if (!input) {
       input = document.createElement('input');
@@ -1228,6 +1277,12 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       else { d.fileTooBig = true; pushLog(n, 'alert', actorName(), t('log_file_too_big', { x: d.name })); }
     }
     pushLog(n, 'note', actorName(), t('log_doc_uploaded', { x: d.name }));
+    // Legal-path attachment: the obligation is ticked by the evidence, not by hand. Only a
+    // file that was really stored counts — an oversized one keeps the item unticked.
+    if (d.legal && (d.fileStore || d.fileUrl)) {
+      const flags = legalFlags(nurseLegal(n), d.legal.route);
+      if (d.legal.idx < flags.length) flags[d.legal.idx] = true;
+    }
     // Uploading the signed privacy form marks the consent as acquired on the record.
     if ((d.name || '').toLowerCase().indexOf('consenso privacy') >= 0 && !n.privacyConsent) {
       n.privacyConsent = true;
@@ -1270,6 +1325,23 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     n.lastUpdate = new Date().toISOString().slice(0, 10);
     commit();
   }
+  // Removing the evidence removes the tick: the checklist must never claim an adempimento
+  // whose document is gone. The record is dropped entirely (it exists only for this item).
+  function deleteLegalDoc(nurseId, routeKey, idx) {
+    const n = getNurse(nurseId); if (!n) return; // stale DOM: candidate removed by another operator
+    const d = legalDoc(n, routeKey, idx); if (!d) return;
+    if (!confirm(t('lp_del_confirm', { x: legalCheckLabels(routeKey)[idx] || d.name }))) return;
+    deleteStoredFile(d);
+    n.documents = n.documents.filter((x) => x.id !== d.id);
+    const lp = nurseLegal(n);
+    if (lp.docs && lp.docs[routeKey]) delete lp.docs[routeKey][idx];
+    const flags = legalFlags(lp, routeKey);
+    if (idx < flags.length) flags[idx] = false;
+    pushLog(n, 'alert', actorName(), t('log_lp_doc_deleted', { x: legalCheckLabels(routeKey)[idx] || d.name }));
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+
   function setLegalField(nurseId, field, value) {
     if (['derogationRegion', 'entryDate', 'nullaOstaDate'].indexOf(field) < 0) return;
     const n = getNurse(nurseId); if (!n) return;
@@ -2610,7 +2682,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
           <p class="flex items-center gap-2 text-sm font-bold text-emerald-800"><i data-lucide="sparkles" class="h-4 w-4"></i>Novità di questa versione</p>
           <ul class="prose-list mt-2 ml-5 list-disc text-sm text-emerald-900/80">
-            <li><b>Inserimento Professionale &amp; Soggiorno:</b> nuova card nella pratica per il percorso normativo — canali di riconoscimento del titolo (1.A/1.B) e di permesso di soggiorno (2.A r-bis / 2.B Carta Blu UE), checklist dedicate e semafori automatici sulle scadenze di legge (§5.5).</li>
+            <li><b>Inserimento Professionale &amp; Soggiorno:</b> nuova card nella pratica per il percorso normativo — canali di riconoscimento del titolo (1.A/1.B) e di permesso di soggiorno (2.A r-bis / 2.B Carta Blu UE), checklist con <b>allegato per ogni voce</b> (carichi il documento e l'adempimento si spunta da solo) e semafori automatici sulle scadenze di legge (§5.5).</li>
             <li><b>Salvataggio in tempo reale con indicatore di stato</b> nell'header (☁︎ Salvato / Salvataggio… / NON salvato / Offline): con più operatori sullo stesso archivio, le modifiche di ciascuno arrivano subito agli altri e un avviso segnala quando il salvataggio sul cloud non riesce (§8).</li>
             <li><b>Avvisi sulle richieste di matching:</b> un messaggio compare quando una richiesta viene creata e quando l'organico è al completo (§6.1).</li>
             <li><b>Scheda candidato stampabile in PDF:</b> pulsante <b>Scheda</b> nell'intestazione del candidato (§7).</li>
@@ -2711,14 +2783,60 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           <li><b>Log &amp; audit trail:</b> note, chiamate e avvisi con data e autore.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.5 · Inserimento Professionale &amp; Soggiorno (percorso normativo)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Sotto documenti e checklist, ogni pratica ha la card del <b>percorso normativo</b>: il fascicolo legale del candidato secondo la Guida Operativa, indipendente dalle 9 fasi (non blocca mai «Avanza Fase»).</p>
-        <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
-          <li><b>Fase 1 · Riconoscimento del Titolo:</b> scegli il canale toccando la scheda <b>1.A Iter Ordinario</b> (Ministero della Salute) o <b>1.B Deroga Regionale</b>. Con la deroga compaiono il campo <b>Regione emittente</b> e l'avviso sul <b>limite territoriale</b> (l'autorizzazione vale solo in quella Regione, fino al 31/12/2027).</li>
-          <li><b>Fase 2 · Permesso di Soggiorno:</b> scegli tra <b>2.A Art. 27 r-bis</b> (infermieri) e <b>2.B Carta Blu UE</b>; per ciascuno vedi i requisiti chiave (per la Carta Blu: RAL ~36.300 €, contratto ≥ 6 mesi, ≥ 20 ore/settimana).</li>
-          <li><b>Checklist doppie:</b> ogni canale ha l'<b>iter amministrativo</b> del lavoratore e i <b>documenti del datore di lavoro</b>; spunta le voci man mano, il badge in alto mostra il progresso totale.</li>
-          <li><b>Semafori scadenze:</b> inserisci la <b>data di ingresso in Italia</b> e la <b>data del Nulla Osta</b>: il sistema calcola Dichiarazione di Ospitalità (48 ore), Contratto di Soggiorno al SUI (8 giorni r-bis / 15 giorni Carta Blu) e Visto D (180 giorni dal Nulla Osta). Rosso = scaduto, ambra = entro 3 giorni, verde = adempiuto (si spegne spuntando la voce corrispondente della checklist).</li>
-          <li><b>Tracciabilità:</b> ogni cambio di canale finisce nel log della pratica e il riepilogo del percorso compare nella <b>Scheda</b> stampabile. Per il quadro giuridico completo vedi la guida <b>Normativa, sezione 7</b>.</li>
-        </ul>
+        <p class="text-sm leading-relaxed text-slate-600">Sotto le sezioni Documenti e Checklist, ogni pratica contiene la card <b>«Inserimento Professionale &amp; Soggiorno»</b>: è il <b>fascicolo legale</b> del candidato, costruito sulla Guida Operativa del progetto. Serve a rispondere in ogni momento a due domande che determinano la riuscita del trasferimento: <b>con quale canale stiamo facendo riconoscere il titolo</b> e <b>con quale canale stiamo ottenendo il permesso di soggiorno</b>.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Il riconoscimento del titolo è la condizione <b>pregiudiziale</b> dell'intera pratica migratoria: senza di esso l'istanza di ingresso non è nemmeno valida. Per questo il percorso normativo è tracciato a parte e <b>corre in parallelo</b> alle 9 fasi operative: registra gli adempimenti di legge (con i loro termini perentori), mentre le 9 fasi registrano il lavoro del progetto. Le due cose non si bloccano a vicenda: il percorso normativo <b>non condiziona mai il pulsante «Avanza Fase»</b>.</p>
+
+        <p class="text-sm leading-relaxed text-slate-600">I canali disponibili sono quattro, due per decisione:</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Canale</th><th class="px-3 py-2">Quando sceglierlo</th><th class="px-3 py-2">Cosa comporta</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">1.A · Iter Ordinario</td><td class="px-3 py-2.5 text-slate-600">Quando c'è tempo e serve un titolo spendibile ovunque in Italia.</td><td class="px-3 py-2.5 text-slate-600">Decreto di equipollenza del Ministero + esame di lingua e deontologia + iscrizione ordinaria all'Albo OPI.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">1.B · Deroga Regionale</td><td class="px-3 py-2.5 text-slate-600">Quando serve operatività immediata presso una struttura di una Regione precisa.</td><td class="px-3 py-2.5 text-slate-600">Elenco speciale regionale: vale <b>solo in quella Regione</b> e fino al <b>31/12/2027</b>. Chiede il campo <b>Regione emittente</b>.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">2.A · Art. 27 r-bis</td><td class="px-3 py-2.5 text-slate-600">Il caso normale: infermiere assunto da struttura pubblica o privata accreditata.</td><td class="px-3 py-2.5 text-slate-600">Modello O sul portale ALI, retribuzione da CCNL, permesso per attesa occupazione ≥ 1 anno in caso di perdita del lavoro.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">2.B · Carta Blu UE</td><td class="px-3 py-2.5 text-slate-600">Profilo altamente qualificato con retribuzione sopra la media ISTAT.</td><td class="px-3 py-2.5 text-slate-600">Modulo BC, Nulla Osta in 30 giorni, contratto ≥ 6 mesi e ≥ 20 ore/settimana; mobilità UE e ricongiungimento facilitati.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="text-sm leading-relaxed text-slate-600">Scelto un canale, sotto compaiono i <b>requisiti chiave</b> (promemoria, non spuntabili) e le <b>checklist</b>: una per l'<b>iter amministrativo</b> che segue il lavoratore e una per i <b>documenti del datore di lavoro</b>, perché in questa procedura anche l'azienda deve dimostrare capacità economica e idoneità alloggiativa. Il badge in alto nella card somma il progresso di tutte le checklist attive.</p>
+
+        <h4 class="pt-1 text-sm font-bold text-slate-800">Gli allegati: la spunta segue il documento</h4>
+        <p class="text-sm leading-relaxed text-slate-600">Ogni voce delle checklist ha a destra il pulsante <b>📎 Allega</b>: carichi lì il documento che <b>prova</b> quell'adempimento (la ricevuta del Modello O, il contratto di soggiorno firmato, la Dichiarazione di Valore…). Al termine del caricamento <b>la voce si spunta da sola</b>: la checklist non è più una dichiarazione dell'operatore, è l'indice del fascicolo.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Con un allegato presente i pulsanti diventano tre: <b>👁 anteprima</b> (apre il file dentro l'app), <b>🔄 sostituisci</b> e <b>🗑 elimina</b>. Sotto il testo della voce compare il nome del file allegato. Valgono le regole di sempre per i documenti: PDF, foto e scansioni, con le immagini compresse in automatico e un limite di circa 4 MB per file.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Gli allegati <b>non sono un archivio separato</b>: diventano documenti a tutti gli effetti, quindi compaiono nella tabella <b>Ciclo di Vita dei Documenti</b> della pratica (dove si possono anche approvare o respingere), nell'<b>Archivio Documenti</b> generale e nella <b>Scheda</b> stampabile. Sono però marcati <b>Facoltativi</b>, così non fanno mai risultare la pratica come «Documenti Mancanti» e non bloccano l'avanzamento delle 9 fasi.</p>
+        <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4 text-sm text-emerald-900/90"><b>La regola in una riga.</b> Il documento comanda la spunta: se <b>carichi</b>, la voce si spunta; se <b>elimini</b> l'allegato (da qui o dalla tabella documenti) o lo <b>respingi</b>, la spunta cade. Puoi comunque spuntare a mano le voci che non producono un documento (per esempio «Iter ministeriale avviato in parallelo»).</div>
+
+        <h4 class="pt-1 text-sm font-bold text-slate-800">Le scadenze perentorie e i semafori</h4>
+        <p class="text-sm leading-relaxed text-slate-600">Compilando <b>Data di ingresso in Italia</b> e <b>Data rilascio Nulla Osta</b> si attiva il riquadro <b>Scadenze normative</b>, che calcola da solo i termini di legge del canale scelto. I colori: <span class="font-semibold text-slate-500">bianco</span> = c'è tempo, <span class="font-semibold text-amber-600">ambra</span> = mancano 3 giorni o meno, <span class="font-semibold text-rose-600">rosso</span> = scaduta, <span class="font-semibold text-emerald-600">verde</span> = adempiuta.</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Semaforo</th><th class="px-3 py-2">Si calcola da</th><th class="px-3 py-2">Diventa verde spuntando</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Dichiarazione di Ospitalità — 48 ore <span class="text-slate-400">(r-bis)</span></td><td class="px-3 py-2.5 text-slate-600">Data di ingresso</td><td class="px-3 py-2.5 text-slate-600">«Dichiarazione di Ospitalità / Cessione di Fabbricato presentata (48 ore)»</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contratto di Soggiorno al SUI — 8 giorni <span class="text-slate-400">(r-bis)</span></td><td class="px-3 py-2.5 text-slate-600">Data di ingresso</td><td class="px-3 py-2.5 text-slate-600">«Contratto di Soggiorno firmato al SUI e kit Mod. 209 ritirato (8 giorni)»</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contratto di Soggiorno al SUI — 15 giorni <span class="text-slate-400">(Carta Blu)</span></td><td class="px-3 py-2.5 text-slate-600">Data di ingresso</td><td class="px-3 py-2.5 text-slate-600">«Contratto di soggiorno sottoscritto al SUI (15 giorni)»</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Richiesta Visto D — 180 giorni <span class="text-slate-400">(Carta Blu)</span></td><td class="px-3 py-2.5 text-slate-600">Data del Nulla Osta</td><td class="px-3 py-2.5 text-slate-600">«Visto D richiesto in Consolato (entro 120–180 giorni dal Nulla Osta)»</td></tr>
+          </tbody>
+        </table></div>
+
+        <div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4">
+          <p class="text-sm font-bold text-amber-800">Da sapere prima di usarla</p>
+          <ul class="prose-list mt-1 ml-5 list-disc text-sm text-amber-900/80">
+            <li>Un semaforo diventa verde <b>solo quando la voce corrispondente risulta spuntata</b> (vedi tabella sopra), cioè in pratica quando ne <b>alleghi il documento</b>: non si chiude da solo al passare della data.</li>
+            <li>Se un file è <b>troppo grande</b> (oltre ~4 MB anche dopo la compressione) il caricamento viene segnalato ma la voce <b>resta non spuntata</b>: la prova non è archiviata, quindi l'adempimento non è dimostrato.</li>
+            <li>Con <b>r-bis</b> la data del Nulla Osta <b>non genera semafori</b> — serve solo alla Carta Blu per il termine del visto. Se non vedi comparire nulla è normale, non è un errore.</li>
+            <li>Cliccando di nuovo il canale già attivo lo <b>deselezioni</b>. Spunte e allegati <b>non si perdono</b>: restano salvati e ricompaiono se riselezioni quel canale.</li>
+            <li>Il badge del progresso conta <b>solo i canali attivi</b>: cambiando canale il totale cambia, è corretto.</li>
+            <li>Qui possono spuntare <b>entrambi i team</b>, a differenza della checklist di fase: il percorso normativo attraversa sia la Rep. Dominicana sia l'Italia.</li>
+            <li>Nel <b>log</b> della pratica finiscono i cambi di canale; le singole spunte aggiornano solo la data di ultima modifica.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5">
+          <p class="text-sm font-bold text-slate-800">Due situazioni tipiche</p>
+          <ul class="prose-list mt-2 ml-5 list-disc text-sm text-slate-600">
+            <li><b>Candidato ancora in Repubblica Dominicana:</b> compili solo la <b>Fase 1</b> (di norma 1.B con la Regione della struttura che assumerà) e alleghi via via traduzione asseverata, Dichiarazione di Valore e ricevuta della domanda all'elenco regionale. La Fase 2 resta vuota finché non parte la richiesta di Nulla Osta.</li>
+            <li><b>Candidato in arrivo:</b> aggiungi la <b>Fase 2</b> (di norma 2.A), alleghi Modello O e Nulla Osta e — <b>il giorno stesso dell'ingresso</b> — inserisci la data di ingresso: da lì il sistema conta le 48 ore per l'ospitalità e gli 8 giorni per il SUI, e allegando la cessione di fabbricato il primo semaforo si chiude.</li>
+          </ul>
+        </div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800">La procedura operativa completa è la <b>n. 8 del §7</b>; il quadro giuridico con tabelle di confronto e prassi regionali è nella guida <b>Normativa, sezione 7</b> (pulsante ⚖️ Normativa in alto). Il riepilogo del percorso compare anche nella <b>Scheda</b> stampabile del candidato.</div>
       </section>
 
       <section id="workflow" class="space-y-4">
@@ -2764,11 +2882,12 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       <section id="procedure" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>7. Usare il gestionale passo-passo</h2>
         <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4">
-          <p class="text-sm font-bold text-indigo-800">Il flusso completo in 6 passi</p>
+          <p class="text-sm font-bold text-indigo-800">Il flusso completo in 7 passi</p>
           <ol class="prose-list mt-1 ml-5 list-decimal text-sm text-indigo-900/80">
             <li><b>Accedi</b> con il tuo account.</li><li><b>Crea l'anagrafica</b> del candidato (procedura 1).</li>
             <li><b>Inserisci e approva i documenti</b> (procedure 2 e 3).</li><li><b>Spunta la checklist</b> della fase corrente.</li>
-            <li><b>Avanza la fase</b> quando il pulsante si sblocca (procedura 4).</li><li><b>Registra le comunicazioni</b> e controlla i semafori (5 e 6).</li>
+            <li><b>Avanza la fase</b> quando il pulsante si sblocca (procedura 4).</li>
+            <li><b>Aggiorna il percorso normativo</b> e le sue scadenze (procedura 8).</li><li><b>Registra le comunicazioni</b> e controlla i semafori (5 e 6).</li>
           </ol>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-5">
@@ -2827,6 +2946,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             <li>Premi <b>Abbina</b> sul candidato scelto e conferma: datore di lavoro aggiornato e log scritto. Ripeti finché il contatore non arriva a organico pieno (es. «3/3 abbinati» → richiesta <b>Abbinata</b>).</li>
             <li>A contratti firmati premi <b>Chiudi richiesta</b>. Per correggere un errore usa la ✕ sul singolo abbinato.</li>
           </ol>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-5">
+          <p class="flex items-center gap-2 text-sm font-bold text-slate-800"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">8</span>Compilare il percorso normativo di un candidato</p>
+          <ol class="prose-list mt-2 ml-5 list-decimal text-sm text-slate-600">
+            <li>Apri la pratica e scorri fino alla card <b>Inserimento Professionale &amp; Soggiorno</b> (sotto Documenti e Checklist).</li>
+            <li>Nel riquadro <b>Fase 1 · Riconoscimento del Titolo</b> clicca la scheda del canale: <b>1.A Iter Ordinario</b> o <b>1.B Deroga Regionale</b>. Se scegli 1.B, scrivi la <b>Regione emittente</b> per esteso (es. Veneto) nel campo che compare: comparirà l'avviso sul limite territoriale con il nome della Regione.</li>
+            <li>Man mano che gli adempimenti si completano, premi <b>📎 Allega</b> sulla voce corrispondente e carica il documento che lo prova (traduzione asseverata, Dichiarazione di Valore, ricevuta della domanda…): <b>la voce si spunta da sola</b>. Le poche voci che non producono un documento le spunti a mano.</li>
+            <li>Quando parte la pratica di soggiorno, nel riquadro <b>Fase 2</b> clicca <b>2.A Art. 27 r-bis</b> o <b>2.B Carta Blu UE</b>. Compaiono i requisiti chiave, le due date e due checklist: <b>iter amministrativo</b> e <b>documenti del datore di lavoro</b>.</li>
+            <li>Inserisci la <b>Data rilascio Nulla Osta</b> appena lo ottieni e la <b>Data di ingresso in Italia</b> il giorno stesso dell'arrivo: è ciò che accende il riquadro <b>Scadenze normative</b>.</li>
+            <li>Controlla i semafori a ogni apertura della pratica: <span class="font-semibold text-amber-600">ambra</span> = mancano 3 giorni o meno, <span class="font-semibold text-rose-600">rosso</span> = termine scaduto.</li>
+            <li>Appena l'adempimento è fatto, <b>allega il documento</b> sulla voce corrispondente (la corrispondenza esatta semaforo → voce è nella tabella del §5.5): la voce si spunta e il semaforo diventa <span class="font-semibold text-emerald-600">verde «Adempiuto»</span>, smettendo di allarmare.</li>
+            <li>Per rileggere un allegato usa <b>👁</b>, per cambiarlo <b>🔄</b>. Con <b>🗑</b> lo elimini: attenzione, la voce torna <b>non spuntata</b> e il semaforo si riaccende.</li>
+          </ol>
+          <p class="mt-2 text-xs text-slate-400">Hai scelto il canale sbagliato? Clicca di nuovo la scheda attiva per deselezionarla: spunte e allegati restano salvati e ricompaiono se la riselezioni.</p>
         </div>
 
         <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4">
@@ -2909,7 +3042,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
           <p class="flex items-center gap-2 text-sm font-bold text-emerald-800"><i data-lucide="sparkles" class="h-4 w-4"></i>What's new in this version</p>
           <ul class="prose-list mt-2 ml-5 list-disc text-sm text-emerald-900/80">
-            <li><b>Professional Placement &amp; Residence:</b> a new card in the case for the regulatory path — qualification-recognition channels (1.A/1.B) and residence-permit channels (2.A r-bis / 2.B EU Blue Card), dedicated checklists and automatic traffic lights on statutory deadlines (§5.5).</li>
+            <li><b>Professional Placement &amp; Residence:</b> a new card in the case for the regulatory path — qualification-recognition channels (1.A/1.B) and residence-permit channels (2.A r-bis / 2.B EU Blue Card), checklists with an <b>attachment per item</b> (upload the document and the obligation ticks itself) and automatic traffic lights on statutory deadlines (§5.5).</li>
             <li><b>Real-time saving with a status indicator</b> in the header (☁︎ Saved / Saving… / NOT saved / Offline): with several operators on the same archive, everyone's changes arrive at once and an alert flags when a cloud save fails (§8).</li>
             <li><b>Matching request alerts:</b> a message appears when a request is created and when it becomes fully staffed (§6.1).</li>
             <li><b>Printable candidate sheet (PDF):</b> the <b>Sheet</b> button in the candidate header (§7).</li>
@@ -3002,14 +3135,60 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           <li><b>Log &amp; audit trail:</b> notes, calls and alerts with date and author.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.5 · Professional Placement &amp; Residence (regulatory path)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Below documents and checklist, every case carries the <b>regulatory path</b> card: the candidate's legal file per the Operating Guide, independent from the 9 phases (it never blocks "Advance Phase").</p>
-        <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
-          <li><b>Phase 1 · Qualification Recognition:</b> pick the channel by tapping <b>1.A Ordinary Route</b> (Ministry of Health) or <b>1.B Regional Derogation</b>. With the derogation you get the <b>Issuing Region</b> field and the <b>territorial-limit</b> warning (the authorisation is valid only in that Region, until 31/12/2027).</li>
-          <li><b>Phase 2 · Residence Permit:</b> choose between <b>2.A Art. 27 r-bis</b> (nurses) and <b>2.B EU Blue Card</b>; each shows its key requirements (Blue Card: ~€36,300 gross salary, contract ≥ 6 months, ≥ 20 hours/week).</li>
-          <li><b>Twin checklists:</b> each channel has the worker's <b>administrative process</b> and the <b>employer documents</b>; tick items as they complete, the badge at the top shows overall progress.</li>
-          <li><b>Deadline traffic lights:</b> enter the <b>date of entry into Italy</b> and the <b>Nulla Osta date</b>: the system computes the Hospitality Declaration (48 hours), the SUI Residence Contract (8 days r-bis / 15 days Blue Card) and the Type D visa (180 days from the clearance). Red = overdue, amber = within 3 days, green = fulfilled (cleared by ticking the matching checklist item).</li>
-          <li><b>Traceability:</b> every channel change is logged in the case history and the path summary appears on the printable <b>Sheet</b>. For the full legal picture see the <b>Regulations guide, section 7</b>.</li>
-        </ul>
+        <p class="text-sm leading-relaxed text-slate-600">Below the Documents and Checklist sections, every case carries the <b>"Professional Placement &amp; Residence"</b> card: the candidate's <b>legal file</b>, built on the project's Operating Guide. It answers, at any moment, the two questions that decide whether the transfer succeeds: <b>through which channel are we getting the qualification recognised</b> and <b>through which channel are we obtaining the residence permit</b>.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Recognition is the <b>precondition</b> of the whole migration file: without it the entry application is not even valid. That is why the regulatory path is tracked separately and <b>runs in parallel</b> to the 9 operational phases: it records the statutory obligations (with their strict deadlines), while the 9 phases record the project's work. The two never block each other: the regulatory path <b>has no effect on the "Advance Phase" button</b>.</p>
+
+        <p class="text-sm leading-relaxed text-slate-600">There are four channels, two per decision:</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Channel</th><th class="px-3 py-2">When to choose it</th><th class="px-3 py-2">What it entails</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">1.A · Ordinary Route</td><td class="px-3 py-2.5 text-slate-600">When there is time and the qualification must be valid anywhere in Italy.</td><td class="px-3 py-2.5 text-slate-600">Ministry equivalence decree + language and ethics exams + ordinary OPI registration.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">1.B · Regional Derogation</td><td class="px-3 py-2.5 text-slate-600">When immediate practice is needed at a facility in one specific Region.</td><td class="px-3 py-2.5 text-slate-600">Special regional list: valid <b>only in that Region</b> and until <b>31/12/2027</b>. Requires the <b>Issuing Region</b> field.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">2.A · Art. 27 r-bis</td><td class="px-3 py-2.5 text-slate-600">The normal case: nurse hired by a public or accredited private facility.</td><td class="px-3 py-2.5 text-slate-600">Form O on the ALI portal, CCNL salary, job-seeking permit ≥ 1 year if the job is lost.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">2.B · EU Blue Card</td><td class="px-3 py-2.5 text-slate-600">Highly qualified profile with pay above the ISTAT average.</td><td class="px-3 py-2.5 text-slate-600">Form BC, clearance in 30 days, contract ≥ 6 months and ≥ 20 hours/week; easier EU mobility and reunification.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="text-sm leading-relaxed text-slate-600">Once a channel is chosen, below it appear the <b>key requirements</b> (reminders, not tickable) and the <b>checklists</b>: one for the <b>administrative process</b> the worker goes through and one for the <b>employer documents</b>, because in this procedure the company too must prove economic capacity and housing suitability. The badge at the top of the card sums up the progress of every active checklist.</p>
+
+        <h4 class="pt-1 text-sm font-bold text-slate-800">Attachments: the tick follows the document</h4>
+        <p class="text-sm leading-relaxed text-slate-600">Every checklist item has an <b>📎 Attach</b> button on its right: that is where you upload the document that <b>proves</b> the obligation (the Form O receipt, the signed residence contract, the Declaration of Value…). When the upload completes, <b>the item ticks itself</b>: the checklist stops being an operator's statement and becomes the index of the file.</p>
+        <p class="text-sm leading-relaxed text-slate-600">With an attachment in place the buttons become three: <b>👁 preview</b> (opens the file inside the app), <b>🔄 replace</b> and <b>🗑 delete</b>. The file name appears under the item text. The usual document rules apply: PDF, photos and scans, images compressed automatically, roughly a 4 MB limit per file.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Attachments are <b>not a separate archive</b>: they become documents in their own right, so they show up in the case's <b>Document Lifecycle</b> table (where they can also be approved or rejected), in the general <b>Document Archive</b> and on the printable <b>Sheet</b>. They are flagged <b>Optional</b>, so they never make a case read as "Missing Documents" and never block the 9-phase pipeline.</p>
+        <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4 text-sm text-emerald-900/90"><b>The rule in one line.</b> The document drives the tick: <b>upload</b> and the item is ticked; <b>delete</b> the attachment (here or from the documents table) or <b>reject</b> it, and the tick falls away. You can still tick by hand the few items that produce no document (for example "Ordinary ministerial route started in parallel").</div>
+
+        <h4 class="pt-1 text-sm font-bold text-slate-800">Strict deadlines and traffic lights</h4>
+        <p class="text-sm leading-relaxed text-slate-600">Filling in <b>Date of entry into Italy</b> and <b>Nulla Osta issue date</b> switches on the <b>Statutory deadlines</b> panel, which computes the legal terms of the chosen channel by itself. Colours: <span class="font-semibold text-slate-500">white</span> = time left, <span class="font-semibold text-amber-600">amber</span> = 3 days or fewer, <span class="font-semibold text-rose-600">red</span> = overdue, <span class="font-semibold text-emerald-600">green</span> = fulfilled.</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Traffic light</th><th class="px-3 py-2">Counted from</th><th class="px-3 py-2">Turns green when you tick</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Hospitality Declaration — 48 hours <span class="text-slate-400">(r-bis)</span></td><td class="px-3 py-2.5 text-slate-600">Date of entry</td><td class="px-3 py-2.5 text-slate-600">"Hospitality Declaration / Cessione di Fabbricato filed (48 hours)"</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">SUI Residence Contract — 8 days <span class="text-slate-400">(r-bis)</span></td><td class="px-3 py-2.5 text-slate-600">Date of entry</td><td class="px-3 py-2.5 text-slate-600">"Residence Contract signed at the SUI and Mod. 209 postal kit collected (8 days)"</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">SUI Residence Contract — 15 days <span class="text-slate-400">(Blue Card)</span></td><td class="px-3 py-2.5 text-slate-600">Date of entry</td><td class="px-3 py-2.5 text-slate-600">"Residence contract signed at the SUI (15 days)"</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Type D visa application — 180 days <span class="text-slate-400">(Blue Card)</span></td><td class="px-3 py-2.5 text-slate-600">Nulla Osta date</td><td class="px-3 py-2.5 text-slate-600">"Type D visa requested at the Consulate (within 120–180 days of the Nulla Osta)"</td></tr>
+          </tbody>
+        </table></div>
+
+        <div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4">
+          <p class="text-sm font-bold text-amber-800">Worth knowing before you use it</p>
+          <ul class="prose-list mt-1 ml-5 list-disc text-sm text-amber-900/80">
+            <li>A traffic light turns green <b>only when the matching item is ticked</b> (see the table above), which in practice means <b>when you attach its document</b>: it never clears itself just because the date passed.</li>
+            <li>If a file is <b>too large</b> (over ~4 MB even after compression) the upload is flagged but the item <b>stays unticked</b>: the evidence is not stored, so the obligation is not proven.</li>
+            <li>With <b>r-bis</b> the Nulla Osta date <b>produces no traffic light</b> — only the Blue Card uses it, for the visa deadline. Seeing nothing appear is normal, not a fault.</li>
+            <li>Clicking the active channel again <b>deselects</b> it. Ticks and attachments are <b>not lost</b>: they stay saved and come back if you reselect that channel.</li>
+            <li>The progress badge counts <b>only the active channels</b>: switching channel changes the total, which is correct.</li>
+            <li><b>Both teams</b> can tick here, unlike the phase checklist: the regulatory path spans both the Dominican Republic and Italy.</li>
+            <li>The case <b>log</b> records channel changes; individual ticks only refresh the last-update date.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5">
+          <p class="text-sm font-bold text-slate-800">Two typical situations</p>
+          <ul class="prose-list mt-2 ml-5 list-disc text-sm text-slate-600">
+            <li><b>Candidate still in the Dominican Republic:</b> you fill in <b>Phase 1</b> only (usually 1.B with the Region of the hiring facility) and attach, one by one, the sworn translation, the Declaration of Value and the receipt of the regional-list application. Phase 2 stays empty until the clearance request starts.</li>
+            <li><b>Candidate about to arrive:</b> add <b>Phase 2</b> (usually 2.A), attach Form O and the Nulla Osta and — <b>on the day of entry itself</b> — enter the entry date: from there the system counts the 48 hours for hospitality and the 8 days for the SUI, and attaching the <i>cessione di fabbricato</i> closes the first traffic light.</li>
+          </ul>
+        </div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800">The full operational procedure is <b>no. 8 in §7</b>; the legal picture with comparison tables and regional practice is in the <b>Regulations guide, section 7</b> (⚖️ Regulations button at the top). The path summary also appears on the candidate's printable <b>Sheet</b>.</div>
       </section>
 
       <section id="workflow" class="space-y-4">
@@ -3055,11 +3234,12 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       <section id="procedure" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>7. Using the app step by step</h2>
         <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4">
-          <p class="text-sm font-bold text-indigo-800">The full flow in 6 steps</p>
+          <p class="text-sm font-bold text-indigo-800">The full flow in 7 steps</p>
           <ol class="prose-list mt-1 ml-5 list-decimal text-sm text-indigo-900/80">
             <li><b>Sign in</b> with your account.</li><li><b>Create the candidate</b> record (procedure 1).</li>
             <li><b>Add and approve documents</b> (procedures 2 and 3).</li><li><b>Tick the checklist</b> for the current phase.</li>
-            <li><b>Advance the phase</b> when the button unlocks (procedure 4).</li><li><b>Log communications</b> and watch the risk alerts (5 and 6).</li>
+            <li><b>Advance the phase</b> when the button unlocks (procedure 4).</li>
+            <li><b>Update the regulatory path</b> and its deadlines (procedure 8).</li><li><b>Log communications</b> and watch the risk alerts (5 and 6).</li>
           </ol>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-5">
@@ -3117,6 +3297,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             <li>Press <b>Match</b> on the chosen candidate and confirm: employer updated and log written. Repeat until the counter reaches full headcount (e.g. "3/3 matched" → request <b>Matched</b>).</li>
             <li>Once contracts are signed press <b>Close request</b>. To fix a mistake use the ✕ on the single assignee.</li>
           </ol>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-5">
+          <p class="flex items-center gap-2 text-sm font-bold text-slate-800"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">8</span>Fill in a candidate's regulatory path</p>
+          <ol class="prose-list mt-2 ml-5 list-decimal text-sm text-slate-600">
+            <li>Open the case and scroll to the <b>Professional Placement &amp; Residence</b> card (below Documents and Checklist).</li>
+            <li>In the <b>Phase 1 · Qualification Recognition</b> box click the channel card: <b>1.A Ordinary Route</b> or <b>1.B Regional Derogation</b>. If you pick 1.B, type the <b>Issuing Region</b> in full (e.g. Veneto) in the field that appears: the territorial-limit warning will name that Region.</li>
+            <li>As obligations complete, press <b>📎 Attach</b> on the matching item and upload the document that proves it (sworn translation, Declaration of Value, application receipt…): <b>the item ticks itself</b>. The few items that produce no document you tick by hand.</li>
+            <li>When the residence file starts, in the <b>Phase 2</b> box click <b>2.A Art. 27 r-bis</b> or <b>2.B EU Blue Card</b>. The key requirements, the two dates and two checklists appear: <b>administrative process</b> and <b>employer documents</b>.</li>
+            <li>Enter the <b>Nulla Osta issue date</b> as soon as you get it and the <b>Date of entry into Italy</b> on the day of arrival: that is what switches on the <b>Statutory deadlines</b> panel.</li>
+            <li>Check the traffic lights every time you open the case: <span class="font-semibold text-amber-600">amber</span> = 3 days or fewer, <span class="font-semibold text-rose-600">red</span> = deadline passed.</li>
+            <li>As soon as an obligation is done, <b>attach its document</b> to the matching item (the exact traffic-light → item mapping is in the §5.5 table): the item ticks and the light turns <span class="font-semibold text-emerald-600">green "Fulfilled"</span>, and stops alarming.</li>
+            <li>To re-read an attachment use <b>👁</b>, to change it <b>🔄</b>. With <b>🗑</b> you delete it: careful, the item goes back to <b>unticked</b> and the traffic light lights up again.</li>
+          </ol>
+          <p class="mt-2 text-xs text-slate-400">Picked the wrong channel? Click the active card again to deselect it: ticks and attachments stay saved and come back if you reselect it.</p>
         </div>
 
         <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4">
@@ -3199,7 +3393,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
           <p class="flex items-center gap-2 text-sm font-bold text-emerald-800"><i data-lucide="sparkles" class="h-4 w-4"></i>Novedades de esta versión</p>
           <ul class="prose-list mt-2 ml-5 list-disc text-sm text-emerald-900/80">
-            <li><b>Inserción Profesional &amp; Residencia:</b> nueva tarjeta en el expediente para el recorrido normativo — canales de reconocimiento del título (1.A/1.B) y de permiso de residencia (2.A r-bis / 2.B Tarjeta Azul UE), checklists dedicadas y semáforos automáticos de los plazos legales (§5.5).</li>
+            <li><b>Inserción Profesional &amp; Residencia:</b> nueva tarjeta en el expediente para el recorrido normativo — canales de reconocimiento del título (1.A/1.B) y de permiso de residencia (2.A r-bis / 2.B Tarjeta Azul UE), checklists con <b>adjunto por cada punto</b> (subes el documento y el trámite se marca solo) y semáforos automáticos de los plazos legales (§5.5).</li>
             <li><b>Guardado en tiempo real con indicador de estado</b> en la cabecera (☁︎ Guardado / Guardando… / NO guardado / Sin conexión): con varios operadores en el mismo archivo, los cambios de cada uno llegan enseguida a los demás y un aviso señala cuando el guardado en la nube falla (§8).</li>
             <li><b>Avisos de solicitudes de matching:</b> aparece un mensaje cuando se crea una solicitud y cuando la plantilla se completa (§6.1).</li>
             <li><b>Ficha del candidato imprimible (PDF):</b> botón <b>Ficha</b> en la cabecera del candidato (§7).</li>
@@ -3292,14 +3486,60 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           <li><b>Registro y auditoría:</b> notas, llamadas y avisos con fecha y autor.</li>
         </ul>
         <h3 class="pt-2 text-base font-bold text-slate-800">5.5 · Inserción Profesional &amp; Residencia (recorrido normativo)</h3>
-        <p class="text-sm leading-relaxed text-slate-600">Debajo de documentos y checklist, cada expediente lleva la tarjeta del <b>recorrido normativo</b>: el dosier legal del candidato según la Guía Operativa, independiente de las 9 fases (nunca bloquea «Avanzar Fase»).</p>
-        <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
-          <li><b>Fase 1 · Reconocimiento del Título:</b> elige el canal tocando <b>1.A Trámite Ordinario</b> (Ministerio de Sanidad) o <b>1.B Derogación Regional</b>. Con la derogación aparecen el campo <b>Región emisora</b> y el aviso del <b>límite territorial</b> (la autorización vale solo en esa Región, hasta el 31/12/2027).</li>
-          <li><b>Fase 2 · Permiso de Residencia:</b> elige entre <b>2.A Art. 27 r-bis</b> (enfermeros) y <b>2.B Tarjeta Azul UE</b>; cada uno muestra sus requisitos clave (Tarjeta Azul: ~36.300 € brutos, contrato ≥ 6 meses, ≥ 20 horas/semana).</li>
-          <li><b>Checklists dobles:</b> cada canal tiene el <b>trámite administrativo</b> del trabajador y los <b>documentos del empleador</b>; marca los puntos a medida que se completan, la insignia superior muestra el progreso total.</li>
-          <li><b>Semáforos de plazos:</b> introduce la <b>fecha de entrada en Italia</b> y la <b>fecha del Nulla Osta</b>: el sistema calcula la Declaración de Hospitalidad (48 horas), el Contrato de Residencia en el SUI (8 días r-bis / 15 días Tarjeta Azul) y el Visado D (180 días desde el Nulla Osta). Rojo = vencido, ámbar = dentro de 3 días, verde = cumplido (se apaga marcando el punto correspondiente de la checklist).</li>
-          <li><b>Trazabilidad:</b> cada cambio de canal queda en el registro del expediente y el resumen del recorrido aparece en la <b>Ficha</b> imprimible. Para el marco jurídico completo, ver la guía <b>Normativa, sección 7</b>.</li>
-        </ul>
+        <p class="text-sm leading-relaxed text-slate-600">Debajo de las secciones Documentos y Checklist, cada expediente lleva la tarjeta <b>«Inserción Profesional &amp; Residencia»</b>: es el <b>dosier legal</b> del candidato, construido sobre la Guía Operativa del proyecto. Sirve para responder en todo momento a dos preguntas que determinan el éxito del traslado: <b>con qué canal estamos reconociendo el título</b> y <b>con qué canal estamos obteniendo el permiso de residencia</b>.</p>
+        <p class="text-sm leading-relaxed text-slate-600">El reconocimiento del título es la condición <b>previa</b> de todo el expediente migratorio: sin él la solicitud de entrada ni siquiera es válida. Por eso el recorrido normativo se registra aparte y <b>corre en paralelo</b> a las 9 fases operativas: recoge los trámites de ley (con sus plazos perentorios), mientras las 9 fases recogen el trabajo del proyecto. Nunca se bloquean entre sí: el recorrido normativo <b>no condiciona el botón «Avanzar Fase»</b>.</p>
+
+        <p class="text-sm leading-relaxed text-slate-600">Hay cuatro canales, dos por decisión:</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Canal</th><th class="px-3 py-2">Cuándo elegirlo</th><th class="px-3 py-2">Qué implica</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">1.A · Trámite Ordinario</td><td class="px-3 py-2.5 text-slate-600">Cuando hay tiempo y se necesita un título válido en toda Italia.</td><td class="px-3 py-2.5 text-slate-600">Decreto de equivalencia del Ministerio + examen de idioma y deontología + inscripción ordinaria en el OPI.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">1.B · Derogación Regional</td><td class="px-3 py-2.5 text-slate-600">Cuando hace falta ejercicio inmediato en una estructura de una Región concreta.</td><td class="px-3 py-2.5 text-slate-600">Lista especial regional: vale <b>solo en esa Región</b> y hasta el <b>31/12/2027</b>. Pide el campo <b>Región emisora</b>.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">2.A · Art. 27 r-bis</td><td class="px-3 py-2.5 text-slate-600">El caso normal: enfermero contratado por estructura pública o privada acreditada.</td><td class="px-3 py-2.5 text-slate-600">Modelo O en el portal ALI, salario según CCNL, permiso por búsqueda de empleo ≥ 1 año si pierde el trabajo.</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">2.B · Tarjeta Azul UE</td><td class="px-3 py-2.5 text-slate-600">Perfil altamente cualificado con retribución por encima de la media ISTAT.</td><td class="px-3 py-2.5 text-slate-600">Módulo BC, Nulla Osta en 30 días, contrato ≥ 6 meses y ≥ 20 horas/semana; movilidad UE y reagrupación facilitadas.</td></tr>
+          </tbody>
+        </table></div>
+        <p class="text-sm leading-relaxed text-slate-600">Elegido un canal, debajo aparecen los <b>requisitos clave</b> (recordatorios, no marcables) y las <b>checklists</b>: una para el <b>trámite administrativo</b> que sigue el trabajador y otra para los <b>documentos del empleador</b>, porque en este procedimiento también la empresa debe acreditar capacidad económica e idoneidad de la vivienda. La insignia superior de la tarjeta suma el progreso de todas las checklists activas.</p>
+
+        <h4 class="pt-1 text-sm font-bold text-slate-800">Los adjuntos: la marca sigue al documento</h4>
+        <p class="text-sm leading-relaxed text-slate-600">Cada punto de las checklists tiene a la derecha el botón <b>📎 Adjuntar</b>: ahí se sube el documento que <b>demuestra</b> ese trámite (el acuse del Modelo O, el contrato de residencia firmado, la Declaración de Valor…). Al terminar la carga <b>el punto se marca solo</b>: la checklist deja de ser una declaración del operador y pasa a ser el índice del dosier.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Con un adjunto presente los botones pasan a ser tres: <b>👁 vista previa</b> (abre el archivo dentro de la app), <b>🔄 reemplazar</b> y <b>🗑 eliminar</b>. Bajo el texto del punto aparece el nombre del archivo. Rigen las reglas de siempre para los documentos: PDF, fotos y escaneos, con las imágenes comprimidas automáticamente y un límite de unos 4 MB por archivo.</p>
+        <p class="text-sm leading-relaxed text-slate-600">Los adjuntos <b>no son un archivo aparte</b>: se convierten en documentos de pleno derecho, así que aparecen en la tabla <b>Ciclo de Vida de los Documentos</b> del expediente (donde también se pueden aprobar o rechazar), en el <b>Archivo de Documentos</b> general y en la <b>Ficha</b> imprimible. Eso sí, van marcados como <b>Opcionales</b>, de modo que nunca hacen que el expediente figure como «Documentos Faltantes» ni bloquean el avance de las 9 fases.</p>
+        <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4 text-sm text-emerald-900/90"><b>La regla en una línea.</b> El documento manda sobre la marca: si <b>subes</b>, el punto se marca; si <b>eliminas</b> el adjunto (desde aquí o desde la tabla de documentos) o lo <b>rechazas</b>, la marca desaparece. Puedes marcar a mano los pocos puntos que no producen documento (por ejemplo «Trámite ministerial ordinario iniciado en paralelo»).</div>
+
+        <h4 class="pt-1 text-sm font-bold text-slate-800">Los plazos perentorios y los semáforos</h4>
+        <p class="text-sm leading-relaxed text-slate-600">Al rellenar <b>Fecha de entrada en Italia</b> y <b>Fecha de emisión del Nulla Osta</b> se enciende el panel <b>Plazos normativos</b>, que calcula solo los términos legales del canal elegido. Los colores: <span class="font-semibold text-slate-500">blanco</span> = hay tiempo, <span class="font-semibold text-amber-600">ámbar</span> = quedan 3 días o menos, <span class="font-semibold text-rose-600">rojo</span> = vencido, <span class="font-semibold text-emerald-600">verde</span> = cumplido.</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Semáforo</th><th class="px-3 py-2">Se cuenta desde</th><th class="px-3 py-2">Se pone verde al marcar</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Declaración de Hospitalidad — 48 horas <span class="text-slate-400">(r-bis)</span></td><td class="px-3 py-2.5 text-slate-600">Fecha de entrada</td><td class="px-3 py-2.5 text-slate-600">«Declaración de Hospitalidad / Cessione di Fabbricato presentada (48 horas)»</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contrato de Residencia en el SUI — 8 días <span class="text-slate-400">(r-bis)</span></td><td class="px-3 py-2.5 text-slate-600">Fecha de entrada</td><td class="px-3 py-2.5 text-slate-600">«Contrato de Residencia firmado en el SUI y kit postal Mod. 209 retirado (8 días)»</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contrato de Residencia en el SUI — 15 días <span class="text-slate-400">(Tarjeta Azul)</span></td><td class="px-3 py-2.5 text-slate-600">Fecha de entrada</td><td class="px-3 py-2.5 text-slate-600">«Contrato de residencia firmado en el SUI (15 días)»</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Solicitud de Visado D — 180 días <span class="text-slate-400">(Tarjeta Azul)</span></td><td class="px-3 py-2.5 text-slate-600">Fecha del Nulla Osta</td><td class="px-3 py-2.5 text-slate-600">«Visado D solicitado en el Consulado (dentro de 120–180 días desde el Nulla Osta)»</td></tr>
+          </tbody>
+        </table></div>
+
+        <div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4">
+          <p class="text-sm font-bold text-amber-800">Conviene saberlo antes de usarla</p>
+          <ul class="prose-list mt-1 ml-5 list-disc text-sm text-amber-900/80">
+            <li>Un semáforo se pone verde <b>solo cuando el punto correspondiente está marcado</b> (ver la tabla de arriba), es decir, en la práctica, <b>cuando adjuntas su documento</b>: no se apaga solo al pasar la fecha.</li>
+            <li>Si un archivo es <b>demasiado grande</b> (más de ~4 MB incluso tras la compresión) la carga se señala pero el punto <b>queda sin marcar</b>: la prueba no está archivada, así que el trámite no queda demostrado.</li>
+            <li>Con <b>r-bis</b> la fecha del Nulla Osta <b>no genera semáforos</b> — solo la usa la Tarjeta Azul, para el plazo del visado. Que no aparezca nada es normal, no es un error.</li>
+            <li>Al pulsar de nuevo el canal activo lo <b>deseleccionas</b>. Marcas y adjuntos <b>no se pierden</b>: quedan guardados y reaparecen si vuelves a seleccionar ese canal.</li>
+            <li>La insignia de progreso cuenta <b>solo los canales activos</b>: al cambiar de canal el total cambia, y es correcto.</li>
+            <li>Aquí pueden marcar <b>ambos equipos</b>, a diferencia de la checklist de fase: el recorrido normativo atraviesa tanto la Rep. Dominicana como Italia.</li>
+            <li>En el <b>registro</b> del expediente quedan los cambios de canal; las marcas individuales solo actualizan la fecha de última modificación.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5">
+          <p class="text-sm font-bold text-slate-800">Dos situaciones típicas</p>
+          <ul class="prose-list mt-2 ml-5 list-disc text-sm text-slate-600">
+            <li><b>Candidato aún en República Dominicana:</b> rellenas solo la <b>Fase 1</b> (normalmente 1.B con la Región de la estructura que contratará) y vas adjuntando la traducción jurada, la Declaración de Valor y el acuse de la solicitud a la lista regional. La Fase 2 queda vacía hasta que arranca la solicitud de Nulla Osta.</li>
+            <li><b>Candidato a punto de llegar:</b> añades la <b>Fase 2</b> (normalmente 2.A), adjuntas Modelo O y Nulla Osta y — <b>el mismo día de la entrada</b> — introduces la fecha de entrada: a partir de ahí el sistema cuenta las 48 horas de hospitalidad y los 8 días del SUI, y al adjuntar la <i>cessione di fabbricato</i> el primer semáforo se cierra.</li>
+          </ul>
+        </div>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800">El procedimiento operativo completo es el <b>n.º 8 del §7</b>; el marco jurídico con tablas de comparación y prácticas regionales está en la guía <b>Normativa, sección 7</b> (botón ⚖️ Normativa arriba). El resumen del recorrido aparece también en la <b>Ficha</b> imprimible del candidato.</div>
       </section>
 
       <section id="workflow" class="space-y-4">
@@ -3345,11 +3585,12 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       <section id="procedure" class="space-y-4">
         <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>7. Usar la app paso a paso</h2>
         <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4">
-          <p class="text-sm font-bold text-indigo-800">El flujo completo en 6 pasos</p>
+          <p class="text-sm font-bold text-indigo-800">El flujo completo en 7 pasos</p>
           <ol class="prose-list mt-1 ml-5 list-decimal text-sm text-indigo-900/80">
             <li><b>Accede</b> con tu cuenta.</li><li><b>Crea el registro</b> del candidato (procedimiento 1).</li>
             <li><b>Añade y aprueba documentos</b> (procedimientos 2 y 3).</li><li><b>Marca la checklist</b> de la fase actual.</li>
-            <li><b>Avanza la fase</b> cuando el botón se desbloquee (procedimiento 4).</li><li><b>Registra comunicaciones</b> y vigila los semáforos (5 y 6).</li>
+            <li><b>Avanza la fase</b> cuando el botón se desbloquee (procedimiento 4).</li>
+            <li><b>Actualiza el recorrido normativo</b> y sus plazos (procedimiento 8).</li><li><b>Registra comunicaciones</b> y vigila los semáforos (5 y 6).</li>
           </ol>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-5">
@@ -3407,6 +3648,20 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
             <li>Pulsa <b>Emparejar</b> en el candidato elegido y confirma: empleador actualizado y registro escrito. Repite hasta que el contador cubra la plantilla (p. ej. «3/3 emparejados» → solicitud <b>Emparejada</b>).</li>
             <li>Con los contratos firmados pulsa <b>Cerrar solicitud</b>. Para corregir un error usa la ✕ sobre el emparejado.</li>
           </ol>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-5">
+          <p class="flex items-center gap-2 text-sm font-bold text-slate-800"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">8</span>Rellenar el recorrido normativo de un candidato</p>
+          <ol class="prose-list mt-2 ml-5 list-decimal text-sm text-slate-600">
+            <li>Abre el expediente y baja hasta la tarjeta <b>Inserción Profesional &amp; Residencia</b> (debajo de Documentos y Checklist).</li>
+            <li>En el bloque <b>Fase 1 · Reconocimiento del Título</b> pulsa la tarjeta del canal: <b>1.A Trámite Ordinario</b> o <b>1.B Derogación Regional</b>. Si eliges 1.B, escribe la <b>Región emisora</b> completa (p. ej. Véneto) en el campo que aparece: el aviso de límite territorial nombrará esa Región.</li>
+            <li>A medida que se completan los trámites, pulsa <b>📎 Adjuntar</b> en el punto correspondiente y sube el documento que lo demuestra (traducción jurada, Declaración de Valor, acuse de la solicitud…): <b>el punto se marca solo</b>. Los pocos puntos que no producen documento los marcas a mano.</li>
+            <li>Cuando arranca el expediente de residencia, en el bloque <b>Fase 2</b> pulsa <b>2.A Art. 27 r-bis</b> o <b>2.B Tarjeta Azul UE</b>. Aparecen los requisitos clave, las dos fechas y dos checklists: <b>trámite administrativo</b> y <b>documentos del empleador</b>.</li>
+            <li>Introduce la <b>Fecha de emisión del Nulla Osta</b> en cuanto lo obtengas y la <b>Fecha de entrada en Italia</b> el mismo día de la llegada: es lo que enciende el panel <b>Plazos normativos</b>.</li>
+            <li>Revisa los semáforos cada vez que abras el expediente: <span class="font-semibold text-amber-600">ámbar</span> = quedan 3 días o menos, <span class="font-semibold text-rose-600">rojo</span> = plazo vencido.</li>
+            <li>En cuanto el trámite esté hecho, <b>adjunta su documento</b> en el punto correspondiente (la correspondencia exacta semáforo → punto está en la tabla del §5.5): el punto se marca y el semáforo pasa a <span class="font-semibold text-emerald-600">verde «Cumplido»</span>, y deja de alarmar.</li>
+            <li>Para releer un adjunto usa <b>👁</b>, para cambiarlo <b>🔄</b>. Con <b>🗑</b> lo eliminas: ojo, el punto vuelve a quedar <b>sin marcar</b> y el semáforo se enciende de nuevo.</li>
+          </ol>
+          <p class="mt-2 text-xs text-slate-400">¿Canal equivocado? Pulsa de nuevo la tarjeta activa para deseleccionarla: marcas y adjuntos quedan guardados y reaparecen si vuelves a seleccionarla.</p>
         </div>
 
         <div class="rounded-xl border-l-4 border-emerald-400 bg-emerald-50 p-4">
@@ -4324,11 +4579,31 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           '<i data-lucide="list-checks" class="h-3.5 w-3.5"></i>' + subtitle +
           '<span class="ml-auto">' + done + '/' + labels.length + '</span></p>' +
         '<div class="space-y-1.5">' +
-        labels.map((label, i) =>
-          '<label class="flex cursor-pointer items-start gap-2.5 rounded-lg border p-2 transition ' + (flags[i] ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-white hover:bg-slate-50') + '">' +
-            '<input type="checkbox" ' + (flags[i] ? 'checked ' : '') + 'data-action="legal-check" data-nurse="' + n.id + '" data-route="' + key + '" data-idx="' + i + '" class="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />' +
-            '<span class="text-xs leading-relaxed ' + (flags[i] ? 'text-slate-400 line-through' : 'text-slate-600') + '">' + escapeHtml(label) + '</span>' +
-          '</label>').join('') +
+        labels.map((label, i) => {
+          const d = legalDoc(n, key, i);
+          const hasFile = !!(d && d.fileName);
+          const btn = (action, icon, text, cls, tip) =>
+            '<button data-action="' + action + '" data-nurse="' + n.id + '" data-route="' + key + '" data-idx="' + i + '" ' +
+              (tip ? 'data-tooltip="' + escapeHtml(tip) + '" ' : '') +
+              'class="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ring-1 ring-inset transition ' + cls + '">' +
+              '<i data-lucide="' + icon + '" class="h-3 w-3"></i>' + (text || '') + '</button>';
+          const actions = hasFile
+            ? btn('legal-view', 'eye', '', 'text-slate-500 ring-slate-200 hover:bg-slate-50', t('doc_view')) +
+              btn('legal-upload', 'refresh-cw', '', 'text-indigo-600 ring-indigo-200 hover:bg-indigo-50', t('act_replace')) +
+              btn('legal-doc-del', 'trash-2', '', 'text-rose-600 ring-rose-200 hover:bg-rose-50', t('act_delete'))
+            : btn('legal-upload', 'paperclip', t('lp_attach'), 'text-indigo-600 ring-indigo-200 hover:bg-indigo-50', t('lp_attach_tip'));
+          const fileLine = hasFile
+            ? '<p class="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400"><i data-lucide="paperclip" class="h-2.5 w-2.5 shrink-0"></i><span class="truncate">' + escapeHtml(d.fileName) + '</span>' +
+              (d.fileTooBig ? '<span class="shrink-0 text-amber-500">(' + escapeHtml(t('file_too_big')) + ')</span>' : '') + '</p>'
+            : '';
+          return '<div class="flex items-start gap-2 rounded-lg border p-2 transition ' + (flags[i] ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-white') + '">' +
+            '<label class="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">' +
+              '<input type="checkbox" ' + (flags[i] ? 'checked ' : '') + 'data-action="legal-check" data-nurse="' + n.id + '" data-route="' + key + '" data-idx="' + i + '" class="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />' +
+              '<span class="min-w-0"><span class="block text-xs leading-relaxed ' + (flags[i] ? 'text-slate-400 line-through' : 'text-slate-600') + '">' + escapeHtml(label) + '</span>' + fileLine + '</span>' +
+            '</label>' +
+            '<div class="flex shrink-0 items-center gap-1">' + actions + '</div>' +
+          '</div>';
+        }).join('') +
         '</div>' +
       '</div>';
     };
@@ -4797,6 +5072,14 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'open-relocation': openRelocationModal(t.getAttribute('data-id')); break;
       case 'save-relocation': saveRelocation(); break;
       case 'legal-route': setLegalRoute(t.getAttribute('data-id'), t.getAttribute('data-group'), t.getAttribute('data-value')); break;
+      case 'legal-upload': triggerLegalUpload(t.getAttribute('data-nurse'), t.getAttribute('data-route'), parseInt(t.getAttribute('data-idx'), 10)); break;
+      case 'legal-doc-del': deleteLegalDoc(t.getAttribute('data-nurse'), t.getAttribute('data-route'), parseInt(t.getAttribute('data-idx'), 10)); break;
+      case 'legal-view': {
+        const ln = getNurse(t.getAttribute('data-nurse'));
+        const ld = ln && legalDoc(ln, t.getAttribute('data-route'), parseInt(t.getAttribute('data-idx'), 10));
+        if (ld) openDocPreview(ln.id, ld.id);
+        break;
+      }
       case 'view-doc': openDocPreview(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
       case 'doc-filter': state.docFilter = t.getAttribute('data-filter'); saveState(); render(); break;
       case 'delete-nurse': deleteNurse(t.getAttribute('data-id')); break;

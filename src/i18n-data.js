@@ -209,6 +209,9 @@ export const I18N = {
       lp_progress:'{a}/{b} adempimenti',
       log_lp_route:'Percorso normativo: selezionato canale {x}.',
       log_lp_route_off:'Percorso normativo: canale {x} deselezionato.',
+      lp_attach:'Allega', lp_attach_tip:'Allega il documento: l’adempimento viene spuntato automaticamente',
+      lp_del_confirm:'Rimuovere l’allegato di «{x}»? L’adempimento tornerà non spuntato.',
+      log_lp_doc_deleted:'Percorso normativo: allegato rimosso da «{x}» — adempimento non più spuntato.',
     },
     en: {
       nav_dashboard:'Analytics Dashboard', nav_cases:'Case Management', at_risk:'{n} at risk', no_risk:'No risk',
@@ -367,6 +370,9 @@ export const I18N = {
       lp_progress:'{a}/{b} obligations',
       log_lp_route:'Regulatory path: channel {x} selected.',
       log_lp_route_off:'Regulatory path: channel {x} deselected.',
+      lp_attach:'Attach', lp_attach_tip:'Attach the document: the obligation is ticked automatically',
+      lp_del_confirm:'Remove the attachment of "{x}"? The obligation will go back to unticked.',
+      log_lp_doc_deleted:'Regulatory path: attachment removed from "{x}" — obligation no longer ticked.',
     },
     es: {
       nav_dashboard:'Panel Analítico', nav_cases:'Gestión de Expedientes', at_risk:'{n} en riesgo', no_risk:'Sin riesgo',
@@ -525,6 +531,9 @@ export const I18N = {
       lp_progress:'{a}/{b} trámites',
       log_lp_route:'Recorrido normativo: canal {x} seleccionado.',
       log_lp_route_off:'Recorrido normativo: canal {x} deseleccionado.',
+      lp_attach:'Adjuntar', lp_attach_tip:'Adjunta el documento: el trámite se marca automáticamente',
+      lp_del_confirm:'¿Quitar el adjunto de «{x}»? El trámite volverá a quedar sin marcar.',
+      log_lp_doc_deleted:'Recorrido normativo: adjunto eliminado de «{x}» — trámite ya no marcado.',
     },
   };
 
