@@ -49,13 +49,14 @@ const GUIDE_TOC = {
     ['g-visto', '4. Visto (fase consolare)'],
     ['g-permesso', '5. Permesso di soggiorno'],
     ['g-riconoscimento', '6. Riconoscimento del titolo'],
-    ['g-lavoro', '7. Ingresso e lavoro in Italia'],
-    ['g-documenti-rd', '8. Documenti dalla Rep. Dominicana'],
-    ['g-diritto-rd', '9. Diritto dominicano'],
-    ['g-privacy', '10. Protezione dei dati personali'],
-    ['g-riferimenti', '11. Riferimenti operativi'],
-    ['g-conclusioni', '12. Conclusioni'],
-    ['g-fonti', '13. Fonti'],
+    ['g-percorso-op', '7. Inserimento professionale e soggiorno'],
+    ['g-lavoro', '8. Ingresso e lavoro in Italia'],
+    ['g-documenti-rd', '9. Documenti dalla Rep. Dominicana'],
+    ['g-diritto-rd', '10. Diritto dominicano'],
+    ['g-privacy', '11. Protezione dei dati personali'],
+    ['g-riferimenti', '12. Riferimenti operativi'],
+    ['g-conclusioni', '13. Conclusioni'],
+    ['g-fonti', '14. Fonti'],
   ],
   en: [
     ['g-summary', '1. Executive summary'],
@@ -64,13 +65,14 @@ const GUIDE_TOC = {
     ['g-visto', '4. Visa (consular stage)'],
     ['g-permesso', '5. Residence permit'],
     ['g-riconoscimento', '6. Qualification recognition'],
-    ['g-lavoro', '7. Entry and work in Italy'],
-    ['g-documenti-rd', '8. Documents from the Dominican Rep.'],
-    ['g-diritto-rd', '9. Dominican law aspects'],
-    ['g-privacy', '10. Personal data protection'],
-    ['g-riferimenti', '11. Practical references'],
-    ['g-conclusioni', '12. Conclusions'],
-    ['g-fonti', '13. Sources'],
+    ['g-percorso-op', '7. Placement & residence tracks'],
+    ['g-lavoro', '8. Entry and work in Italy'],
+    ['g-documenti-rd', '9. Documents from the Dominican Rep.'],
+    ['g-diritto-rd', '10. Dominican law aspects'],
+    ['g-privacy', '11. Personal data protection'],
+    ['g-riferimenti', '12. Practical references'],
+    ['g-conclusioni', '13. Conclusions'],
+    ['g-fonti', '14. Sources'],
   ],
   es: [
     ['g-summary', '1. Resumen ejecutivo'],
@@ -79,13 +81,14 @@ const GUIDE_TOC = {
     ['g-visto', '4. Visado (fase consular)'],
     ['g-permesso', '5. Permiso de residencia'],
     ['g-riconoscimento', '6. Reconocimiento del título'],
-    ['g-lavoro', '7. Entrada y trabajo en Italia'],
-    ['g-documenti-rd', '8. Documentos de la Rep. Dominicana'],
-    ['g-diritto-rd', '9. Derecho dominicano'],
-    ['g-privacy', '10. Protección de datos personales'],
-    ['g-riferimenti', '11. Referencias operativas'],
-    ['g-conclusioni', '12. Conclusiones'],
-    ['g-fonti', '13. Fuentes'],
+    ['g-percorso-op', '7. Inserción profesional y residencia'],
+    ['g-lavoro', '8. Entrada y trabajo en Italia'],
+    ['g-documenti-rd', '9. Documentos de la Rep. Dominicana'],
+    ['g-diritto-rd', '10. Derecho dominicano'],
+    ['g-privacy', '11. Protección de datos personales'],
+    ['g-riferimenti', '12. Referencias operativas'],
+    ['g-conclusioni', '13. Conclusiones'],
+    ['g-fonti', '14. Fuentes'],
   ],
 };
 
@@ -160,29 +163,73 @@ function guideBodyIT() {
         <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Nel gestionale.</b> Queste tappe corrispondono agli stati 3–9 della pipeline (Documenti verificati → Iscrizione OPI): usa la checklist di ogni stato per tracciare traduzioni, apostille e invii al Ministero.</div>
       </section>
 
+      <section id="g-percorso-op" class="space-y-4">
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="route" class="h-5 w-5 text-indigo-500"></i>7. Inserimento professionale e soggiorno: i due binari operativi</h2>
+        <p class="text-sm leading-relaxed text-slate-600">La <b>Guida Operativa</b> del progetto organizza il percorso legale di ogni candidato attorno a <b>due decisioni</b>, tracciate una per una nel gestionale: con quale canale far <b>riconoscere il titolo</b> (Fase 1) e con quale canale ottenere il <b>permesso di soggiorno</b> (Fase 2). Il riconoscimento è la condizione essenziale e pregiudiziale dell'intera pratica migratoria: senza di esso l'istanza di ingresso non è nemmeno valida.</p>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Fase 1 — Riconoscimento del titolo: iter ordinario (1.A) o deroga regionale (1.B)</h3>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2"></th><th class="px-3 py-2">1.A · Iter Ordinario (Ministero della Salute)</th><th class="px-3 py-2">1.B · Procedura Accelerata in Deroga (Regione)</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Esito</td><td class="px-3 py-2.5 text-slate-600">Decreto di Equipollenza + iscrizione ordinaria all'Albo OPI</td><td class="px-3 py-2.5 text-slate-600">Iscrizione agli elenchi speciali regionali (Art. 15 D.L. 34/2023, conv. L. 56/2023)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Tempi</td><td class="px-3 py-2.5 text-slate-600">Diversi mesi: i tempi ministeriali sono la variabile critica</td><td class="px-3 py-2.5 text-slate-600">Operatività immediata, nelle more dell'iter ministeriale</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Validità</td><td class="px-3 py-2.5 text-slate-600"><b>Tutto il territorio nazionale</b>, stabilità assoluta</td><td class="px-3 py-2.5 text-slate-600"><b>Solo la Regione emittente</b>; regime transitorio fino al <b>31/12/2027</b></td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Adempimenti tipici</td><td class="px-3 py-2.5 text-slate-600">Curriculum studiorum col monte-ore per materia, traduzioni legalizzate/Apostille, esame di lingua (min. A2/B1), verifica deontologica</td><td class="px-3 py-2.5 text-slate-600">Titolo con traduzione asseverata, attestato di iscrizione all'ordine d'origine, <b>Dichiarazione di Valore</b> consolare</td></tr>
+          </tbody>
+        </table></div>
+        <p class="text-sm leading-relaxed text-slate-600">Le prassi regionali divergono: il <b>modello Veneto</b> prevede la verifica diretta e immediata del titolo con responsabilità esclusiva in capo al datore di lavoro; il <b>modello centralizzato</b> (Piemonte, Umbria, Puglia) passa da determine regionali con controllo preventivo dell'ente o parere SUI. In regime di deroga la struttura sanitaria diventa di fatto un ente certificatore: il controllo preventivo della documentazione è un'esigenza di compliance, non solo logistica.</p>
+        <div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-800"><b>Limite territoriale.</b> L'autorizzazione in deroga vale solo nella Regione che la emette: un infermiere autorizzato in Veneto <b>non può</b> essere spostato in Lombardia senza ripetere integralmente l'iter. Strategia consigliata: avviare l'iter ministeriale <b>in parallelo</b> alla deroga, così il titolo diventa spendibile su tutto il territorio nazionale alla fine del regime emergenziale.</div>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Fase 2 — Permesso di soggiorno: Art. 27 r-bis (2.A) o Carta Blu UE (2.B)</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Entrambi i canali consentono l'ingresso <b>fuori dalle quote</b> del Decreto Flussi, ma con requisiti e benefici diversi:</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Caratteristica</th><th class="px-3 py-2">2.A · Art. 27 r-bis (Infermieri)</th><th class="px-3 py-2">2.B · Carta Blu UE (Art. 27-quater)</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Ambito</td><td class="px-3 py-2.5 text-slate-600">Solo infermieri professionali di strutture sanitarie pubbliche o private accreditate</td><td class="px-3 py-2.5 text-slate-600">Ogni lavoratore altamente qualificato</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Titolo richiesto</td><td class="px-3 py-2.5 text-slate-600">Laurea in infermieristica riconosciuta (o autorizzazione regionale transitoria fino al 31/12/2027)</td><td class="px-3 py-2.5 text-slate-600">Laurea triennale o qualifica superiore, oppure 5 anni di esperienza pertinente</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Salario minimo</td><td class="px-3 py-2.5 text-slate-600">Trattamento del CCNL di categoria</td><td class="px-3 py-2.5 text-slate-600">CCNL e comunque sopra la media ISTAT (~<b>36.300 €</b> RAL)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Domanda (portale ALI)</td><td class="px-3 py-2.5 text-slate-600"><b>Modello O</b></td><td class="px-3 py-2.5 text-slate-600"><b>Modulo BC</b> — Nulla Osta entro <b>30 giorni</b> (L. 182/2025)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contratto</td><td class="px-3 py-2.5 text-slate-600">Determinato o indeterminato</td><td class="px-3 py-2.5 text-slate-600">Durata minima <b>6 mesi</b>, almeno <b>20 ore/settimana</b></td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Mobilità UE</td><td class="px-3 py-2.5 text-slate-600">Non prevista specificamente</td><td class="px-3 py-2.5 text-slate-600">Facilitata dopo 12 mesi di soggiorno</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Ricongiungimento</td><td class="px-3 py-2.5 text-slate-600">Ordinario (dopo 1 anno)</td><td class="px-3 py-2.5 text-slate-600">Immediato e facilitato</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Perdita del lavoro</td><td class="px-3 py-2.5 text-slate-600">Permesso per attesa occupazione ≥ 1 anno, senza cambio mansione</td><td class="px-3 py-2.5 text-slate-600">Tutele simili + lavoro autonomo in parallelo</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Le scadenze da non mancare</h3>
+        <ul class="prose-list ml-5 list-disc text-sm leading-relaxed text-slate-600">
+          <li><b>48 ore</b> dall'ingresso: Dichiarazione di Ospitalità / Cessione di Fabbricato di chi ospita il lavoratore.</li>
+          <li><b>8 giorni</b> dall'ingresso (r-bis): firma del Contratto di Soggiorno al SUI, ritiro del kit postale Mod. 209, Accordo di Integrazione se il soggiorno supera i 365 giorni.</li>
+          <li><b>15 giorni</b> dall'ingresso (Carta Blu): sottoscrizione del contratto di soggiorno al SUI.</li>
+          <li><b>120–180 giorni</b> dal Nulla Osta (Carta Blu): richiesta del Visto D in Consolato.</li>
+        </ul>
+        <p class="text-sm leading-relaxed text-slate-600">Il <b>datore di lavoro</b> deve comprovare capacità economica e conformità logistica: visura camerale recente (&lt; 6 mesi), DURC regolare, idoneità alloggiativa o contratto di locazione registrato (in alternativa prenotazione albergo/residence ≥ 1 mese su carta intestata), contratto di appalto per le cooperative, proposta CCNL e impegno scritto alle spese di rientro; per la Carta Blu si aggiungono l'asseverazione di capacità economica e la marca da bollo da 16 €.</p>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>Nel gestionale.</b> Ogni pratica ha la card <b>«Inserimento Professionale &amp; Soggiorno»</b>: selezioni il canale della Fase 1 (1.A/1.B con Regione emittente) e della Fase 2 (2.A/2.B), spunti gli adempimenti del lavoratore e i documenti del datore di lavoro, e inserendo la data di ingresso e la data del Nulla Osta i <b>semafori calcolano automaticamente le scadenze</b> (48 ore, 8/15 giorni, 180 giorni).</div>
+      </section>
+
       <section id="g-lavoro" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="briefcase" class="h-5 w-5 text-indigo-500"></i>7. Ingresso e lavoro in Italia: permessi che abilitano al lavoro</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="briefcase" class="h-5 w-5 text-indigo-500"></i>8. Ingresso e lavoro in Italia: permessi che abilitano al lavoro</h2>
         <p class="text-sm leading-relaxed text-slate-600">Per lavorare in Italia il cittadino straniero deve possedere un permesso di soggiorno che <b>abilita al lavoro</b>; il D.Lgs. 40/2014 ha configurato il "permesso unico lavoro" sui titoli che consentono attività lavorativa.${fn(6)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Permessi rilasciati per turismo, affari o giustizia <b>non abilitano al lavoro</b> e non sono convertibili in permessi per lavoro; i permessi che abilitano al lavoro possono invece essere convertiti alla scadenza, se sussistono i requisiti.${fn(6)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Per gli infermieri si applicano i permessi per lavoro subordinato legati all'attività infermieristica presso strutture sanitarie, con regole di rinnovo collegate al mantenimento della qualifica e del rapporto di lavoro per cui era stato rilasciato il nulla osta.${fn(7, 3)}</p>
       </section>
 
       <section id="g-documenti-rd" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>8. Documentazione da predisporre nella Repubblica Dominicana</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>9. Documentazione da predisporre nella Repubblica Dominicana</h2>
         <p class="text-sm leading-relaxed text-slate-600">Per la fase consolare e per il riconoscimento del titolo, i documenti dominicani devono generalmente essere <b>tradotti</b> in italiano o inglese da traduttori giurati e <b>legalizzati tramite apostille dell'Aia</b>; questo vale per certificati penali, titoli di studio, certificati medici e altri atti ufficiali.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">I certificati di <b>casellario giudiziario</b> devono essere legalizzati con apostille e tradotti; per i visti di lavoro è spesso richiesto anche un <b>certificato medico</b> di buona salute ed eventuali documenti che attestino l'assenza di impedimenti all'esercizio della professione.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">La lettera di richiesta visto, l'invito della società italiana e l'eventuale delibera del Ministero del Lavoro dominicano (certificato <b>SIRLA</b>) possono essere necessari per alcune tipologie di visto lavoro.${fn(9, 5)}</p>
       </section>
 
       <section id="g-diritto-rd" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="globe" class="h-5 w-5 text-indigo-500"></i>9. Elementi di diritto dominicano e mobilità internazionale</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="globe" class="h-5 w-5 text-indigo-500"></i>10. Elementi di diritto dominicano e mobilità internazionale</h2>
         <p class="text-sm leading-relaxed text-slate-600">Le fonti sul regime dei visti e permessi di lavoro in Repubblica Dominicana illustrano le categorie di visto (turistico, affari, lavoro) e i rispettivi requisiti; tali regole incidono soprattutto sulla fase di uscita dal paese e sulla regolarità dei documenti da presentare all'autorità italiana.${fn(9, 5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Per i cittadini italiani non è richiesto il visto turistico per entrare in Repubblica Dominicana <b>fino a 60 giorni</b> — informazione utile se si prevedono fasi di formazione o selezione svolte in loco con personale italiano.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">La Repubblica Dominicana fa parte del gruppo di paesi <b>ACP</b> con accordi economici con l'UE: circostanza rilevante più per l'ambito commerciale che per l'immigrazione, ma che può generare richieste di documentazione doganale particolare (documento EUR.1) per movimentazioni di beni.${fn(5)}</p>
       </section>
 
       <section id="g-privacy" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="shield-check" class="h-5 w-5 text-indigo-500"></i>10. Protezione dei dati personali (Italia e Repubblica Dominicana)</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="shield-check" class="h-5 w-5 text-indigo-500"></i>11. Protezione dei dati personali (Italia e Repubblica Dominicana)</h2>
         <p class="text-sm leading-relaxed text-slate-600">Il gestionale raccoglie in Repubblica Dominicana i dati anagrafici, i documenti d'identità e i titoli professionali dei candidati, per poi trattarli e trasmetterli in Italia a operatori HR e strutture sanitarie: si applicano quindi, <b>cumulativamente</b>, il regime dominicano di protezione dei dati (dove i dati nascono) e quello italiano/europeo (dove vengono trattati e ricevuti).${fn(10, 12)}</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">Repubblica Dominicana: la Ley 172-13</h3>
         <p class="text-sm leading-relaxed text-slate-600">La <b>Ley 172-13</b> del 13 dicembre 2013 (fondata sull'art. 44 della Costituzione dominicana) tutela in modo integrale i dati personali contenuti in archivi, registri e banche dati pubbliche o private. Stabilisce i principi di <b>legalità, qualità, informazione, consenso, sicurezza e riservatezza</b> e riconosce i cosiddetti <b>diritti ARCO</b> — accesso, rettifica, cancellazione e opposizione — esercitabili in modo indipendente l'uno dall'altro, oltre all'azione giudiziale di <b>habeas data</b> per conoscere, accedere e correggere i propri dati.${fn(10, 11)}</p>
@@ -195,7 +242,7 @@ function guideBodyIT() {
       </section>
 
       <section id="g-riferimenti" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>11. Riferimenti operativi e suggerimenti pratici</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>12. Riferimenti operativi e suggerimenti pratici</h2>
         <p class="text-sm leading-relaxed text-slate-600">Per la parte italiana, le fonti primarie di riferimento operativo sono:</p>
         <ul class="prose-list ml-5 list-disc text-sm leading-relaxed text-slate-600">
           <li>Sito del <b>Ministero della Salute</b>, sezione riconoscimento titoli professionali sanitari, con modulistica D2-1 INF e istruzioni dettagliate.${fn(4)}</li>
@@ -207,12 +254,12 @@ function guideBodyIT() {
       </section>
 
       <section id="g-conclusioni" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="flag" class="h-5 w-5 text-indigo-500"></i>12. Conclusioni</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="flag" class="h-5 w-5 text-indigo-500"></i>13. Conclusioni</h2>
         <p class="text-sm leading-relaxed text-slate-600">Il trasferimento richiede il coordinamento di <b>tre piani</b>: riconoscimento del titolo presso il Ministero della Salute, procedura di nulla osta e visto per lavoro subordinato specifico per infermieri, e successivo rilascio e rinnovo del permesso di soggiorno, con attenzione alle norme speciali che tutelano questa categoria.${fn(1, 3, 2, 4)}</p>
         <p class="text-sm leading-relaxed text-slate-600">La corretta predisposizione della documentazione dominicana (traduzioni giurate, apostille, certificati penali e medici) e il rispetto dei termini amministrativi (quattro mesi per il riconoscimento, scadenze per la richiesta del permesso dopo l'ingresso) sono elementi centrali per un progetto di migrazione professionale fluido e conforme.${fn(8, 5, 4)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Il ricorso a consulenti esperti in diritto dell'immigrazione italiana e dominicana, oltre al dialogo diretto con le istituzioni competenti (Ministero della Salute, Sportello Unico Immigrazione, ambasciata italiana in RD), aiuta a gestire casistiche particolari, misure compensative e controversie su tempi o dinieghi.</p>
       </section>
-${refsHtml('13. Fonti e riferimenti', 'Le note numerate nel testo rimandano a queste fonti (link esterni, si aprono in una nuova scheda).')}`;
+${refsHtml('14. Fonti e riferimenti', 'Le note numerate nel testo rimandano a queste fonti (link esterni, si aprono in una nuova scheda).')}`;
 }
 
 // =====================================================================================
@@ -286,29 +333,73 @@ function guideBodyEN() {
         <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>In the app.</b> These milestones map to pipeline states 3–9 (Documents verified → OPI registration): use each state's checklist to track translations, apostilles and Ministry filings.</div>
       </section>
 
+      <section id="g-percorso-op" class="space-y-4">
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="route" class="h-5 w-5 text-indigo-500"></i>7. Professional placement and residence: the two operational tracks</h2>
+        <p class="text-sm leading-relaxed text-slate-600">The project's <b>Operating Guide</b> organises each candidate's legal path around <b>two decisions</b>, both tracked in the app: which channel to use for <b>qualification recognition</b> (Phase 1) and which channel for the <b>residence permit</b> (Phase 2). Recognition is the essential precondition of the whole migration file: without it the entry application is not even valid.</p>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Phase 1 — Qualification recognition: ordinary route (1.A) or regional derogation (1.B)</h3>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2"></th><th class="px-3 py-2">1.A · Ordinary Route (Ministry of Health)</th><th class="px-3 py-2">1.B · Accelerated Derogation Procedure (Region)</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Outcome</td><td class="px-3 py-2.5 text-slate-600">Equivalence Decree + ordinary registration with the OPI register</td><td class="px-3 py-2.5 text-slate-600">Registration in the special regional lists (Art. 15 of Decree-Law 34/2023)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Timing</td><td class="px-3 py-2.5 text-slate-600">Several months: ministerial timing is the critical variable</td><td class="px-3 py-2.5 text-slate-600">Immediate practice while the ministerial route is pending</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Validity</td><td class="px-3 py-2.5 text-slate-600"><b>The whole country</b>, full stability</td><td class="px-3 py-2.5 text-slate-600"><b>Only the issuing Region</b>; transitional regime until <b>31/12/2027</b></td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Typical obligations</td><td class="px-3 py-2.5 text-slate-600">Curriculum with hours per subject, legalised translations/Apostille, language exam (min. A2/B1), professional-ethics check</td><td class="px-3 py-2.5 text-slate-600">Sworn-translated qualification, home-country registration certificate, consular <b>Declaration of Value</b></td></tr>
+          </tbody>
+        </table></div>
+        <p class="text-sm leading-relaxed text-slate-600">Regional practice differs: the <b>Veneto model</b> relies on direct, immediate verification of the qualification with liability resting solely on the employer; the <b>centralised model</b> (Piedmont, Umbria, Apulia) goes through regional resolutions with prior review by the regional body or the SUI. Under derogation the healthcare facility becomes a de-facto certifying body: preventive document checks are a compliance requirement, not just logistics.</p>
+        <div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-800"><b>Territorial limit.</b> The derogation authorisation is valid only in the Region that issues it: a nurse authorised in Veneto <b>cannot</b> be moved to Lombardy without repeating the whole process. Recommended strategy: start the ministerial route <b>in parallel</b> with the derogation, so the qualification becomes valid nationwide once the emergency regime ends.</div>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Phase 2 — Residence permit: Art. 27 r-bis (2.A) or EU Blue Card (2.B)</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Both channels allow entry <b>outside the quotas</b> of the Decreto Flussi, but with different requirements and benefits:</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Feature</th><th class="px-3 py-2">2.A · Art. 27 r-bis (Nurses)</th><th class="px-3 py-2">2.B · EU Blue Card (Art. 27-quater)</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Scope</td><td class="px-3 py-2.5 text-slate-600">Professional nurses of public or accredited private healthcare facilities only</td><td class="px-3 py-2.5 text-slate-600">Any highly qualified worker</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Qualification</td><td class="px-3 py-2.5 text-slate-600">Recognised nursing degree (or transitional regional authorisation until 31/12/2027)</td><td class="px-3 py-2.5 text-slate-600">Bachelor-level degree or higher qualification, or 5 years of relevant experience</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Minimum salary</td><td class="px-3 py-2.5 text-slate-600">Collective agreement (CCNL) treatment</td><td class="px-3 py-2.5 text-slate-600">CCNL and above the ISTAT average (~<b>€36,300</b> gross/year)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Application (ALI portal)</td><td class="px-3 py-2.5 text-slate-600"><b>Form O</b></td><td class="px-3 py-2.5 text-slate-600"><b>Form BC</b> — clearance within <b>30 days</b> (Law 182/2025)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contract</td><td class="px-3 py-2.5 text-slate-600">Fixed-term or permanent</td><td class="px-3 py-2.5 text-slate-600">Minimum <b>6 months</b>, at least <b>20 hours/week</b></td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">EU mobility</td><td class="px-3 py-2.5 text-slate-600">Not specifically provided</td><td class="px-3 py-2.5 text-slate-600">Facilitated after 12 months of residence</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Family reunification</td><td class="px-3 py-2.5 text-slate-600">Ordinary (after 1 year)</td><td class="px-3 py-2.5 text-slate-600">Immediate and facilitated</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Job loss</td><td class="px-3 py-2.5 text-slate-600">Job-seeking permit ≥ 1 year, no change of role</td><td class="px-3 py-2.5 text-slate-600">Similar protection + self-employment in parallel</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Deadlines you cannot miss</h3>
+        <ul class="prose-list ml-5 list-disc text-sm leading-relaxed text-slate-600">
+          <li><b>48 hours</b> from entry: Hospitality Declaration / <i>Cessione di Fabbricato</i> filed by whoever hosts the worker.</li>
+          <li><b>8 days</b> from entry (r-bis): Residence Contract signed at the SUI, Mod. 209 postal kit collected, Integration Agreement if the stay exceeds 365 days.</li>
+          <li><b>15 days</b> from entry (Blue Card): residence contract signed at the SUI.</li>
+          <li><b>120–180 days</b> from the clearance (Blue Card): Type D visa application at the Consulate.</li>
+        </ul>
+        <p class="text-sm leading-relaxed text-slate-600">The <b>employer</b> must prove economic capacity and logistical compliance: recent company registration (&lt; 6 months), valid DURC, housing suitability or a registered lease (alternatively a hotel/residence booking ≥ 1 month on letterhead), a service contract for cooperatives, a CCNL contract proposal and a written commitment to repatriation costs; the Blue Card adds the certified statement of economic capacity and the €16 revenue stamp.</p>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>In the app.</b> Every case has the <b>"Professional Placement &amp; Residence"</b> card: choose the Phase 1 channel (1.A/1.B with issuing Region) and the Phase 2 channel (2.A/2.B), tick the worker's obligations and the employer's documents, and once the entry date and clearance date are set the <b>traffic lights compute the statutory deadlines automatically</b> (48 hours, 8/15 days, 180 days).</div>
+      </section>
+
       <section id="g-lavoro" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="briefcase" class="h-5 w-5 text-indigo-500"></i>7. Entry and work in Italy: permits that allow work</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="briefcase" class="h-5 w-5 text-indigo-500"></i>8. Entry and work in Italy: permits that allow work</h2>
         <p class="text-sm leading-relaxed text-slate-600">To work in Italy, a foreign national must hold a residence permit that <b>entitles them to work</b>; Legislative Decree 40/2014 shaped the "single work permit" wording on such permits.${fn(6)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Permits issued for tourism, business or justice reasons <b>never allow work</b> and cannot be converted into work permits; permits that do allow work can instead be converted on expiry if the requirements are met.${fn(6)}</p>
         <p class="text-sm leading-relaxed text-slate-600">For nurses, the applicable permits are the salaried-employment ones tied to nursing work at healthcare facilities, with renewal rules linked to keeping the qualification and the employment relationship for which the clearance was issued.${fn(7, 3)}</p>
       </section>
 
       <section id="g-documenti-rd" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>8. Documents to prepare in the Dominican Republic</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>9. Documents to prepare in the Dominican Republic</h2>
         <p class="text-sm leading-relaxed text-slate-600">For the consular stage and for qualification recognition, Dominican documents generally must be <b>translated</b> into Italian or English by sworn translators and <b>legalised with a Hague apostille</b>; this applies to criminal records, qualifications, medical certificates and other official deeds.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600"><b>Criminal record certificates</b> must be apostilled and translated; work visas often also require a <b>medical certificate</b> of good health and documents showing no impediments to practising the profession.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">The visa request letter, the Italian company's invitation and, where applicable, the Dominican Ministry of Labour resolution (<b>SIRLA</b> certificate) may be needed for certain work-visa types.${fn(9, 5)}</p>
       </section>
 
       <section id="g-diritto-rd" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="globe" class="h-5 w-5 text-indigo-500"></i>9. Dominican law and international mobility</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="globe" class="h-5 w-5 text-indigo-500"></i>10. Dominican law and international mobility</h2>
         <p class="text-sm leading-relaxed text-slate-600">Sources on Dominican visa and work-permit rules describe the visa categories (tourism, business, work) and their requirements; these rules mainly affect the exit stage and the regularity of the documents to be presented to the Italian authorities.${fn(9, 5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Italian citizens do not need a tourist visa to enter the Dominican Republic <b>for up to 60 days</b> — useful if training or selection stages are run locally with Italian staff.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">The Dominican Republic belongs to the <b>ACP</b> group of countries with economic agreements with the EU — more relevant to trade than to nurse immigration, but it can trigger special customs paperwork (EUR.1 document) for goods movements.${fn(5)}</p>
       </section>
 
       <section id="g-privacy" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="shield-check" class="h-5 w-5 text-indigo-500"></i>10. Personal data protection (Italy and the Dominican Republic)</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="shield-check" class="h-5 w-5 text-indigo-500"></i>11. Personal data protection (Italy and the Dominican Republic)</h2>
         <p class="text-sm leading-relaxed text-slate-600">The app collects candidates' personal data, identity documents and professional qualifications in the Dominican Republic, then processes and transmits them to HR staff and healthcare facilities in Italy: <b>both</b> the Dominican data-protection regime (where the data originates) and the Italian/EU one (where it is processed and received) apply <b>cumulatively</b>.${fn(10, 12)}</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">Dominican Republic: Law 172-13</h3>
         <p class="text-sm leading-relaxed text-slate-600"><b>Law 172-13</b> of 13 December 2013 (based on Article 44 of the Dominican Constitution) provides comprehensive protection for personal data held in files, registers and public or private databases. It sets out the principles of <b>legality, quality, information, consent, security and confidentiality</b> and recognises the so-called <b>ARCO rights</b> — access, rectification, cancellation and opposition — each exercisable independently of the others, plus the judicial <i>habeas data</i> action (constitutional remedy to know, access and correct one's own data) available under Dominican law.${fn(10, 11)}</p>
@@ -321,7 +412,7 @@ function guideBodyEN() {
       </section>
 
       <section id="g-riferimenti" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>11. Practical references and tips</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>12. Practical references and tips</h2>
         <p class="text-sm leading-relaxed text-slate-600">On the Italian side, the primary operational references are:</p>
         <ul class="prose-list ml-5 list-disc text-sm leading-relaxed text-slate-600">
           <li>The <b>Ministry of Health</b> website, healthcare qualification recognition section, with the D2-1 INF forms and detailed instructions.${fn(4)}</li>
@@ -333,12 +424,12 @@ function guideBodyEN() {
       </section>
 
       <section id="g-conclusioni" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="flag" class="h-5 w-5 text-indigo-500"></i>12. Conclusions</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="flag" class="h-5 w-5 text-indigo-500"></i>13. Conclusions</h2>
         <p class="text-sm leading-relaxed text-slate-600">The transfer requires coordinating <b>three tracks</b>: qualification recognition at the Ministry of Health, the clearance-plus-visa procedure for nurse salaried employment, and the subsequent issue and renewal of the residence permit, minding the special rules protecting this category.${fn(1, 3, 2, 4)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Correctly preparing the Dominican documentation (sworn translations, apostilles, criminal and medical certificates) and meeting the administrative deadlines (four months for recognition, permit application deadlines after entry) are central to a smooth, compliant professional migration project.${fn(8, 5, 4)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Working with advisors experienced in Italian and Dominican immigration law, and direct dialogue with the competent institutions (Ministry of Health, One-Stop Immigration Desk, Italian embassy in the DR), helps manage edge cases, compensatory measures and disputes over timing or refusals.</p>
       </section>
-${refsHtml('13. Sources and references', 'The numbered notes in the text point to these sources (external links, they open in a new tab; most are in Italian).')}`;
+${refsHtml('14. Sources and references', 'The numbered notes in the text point to these sources (external links, they open in a new tab; most are in Italian).')}`;
 }
 
 // =====================================================================================
@@ -412,29 +503,73 @@ function guideBodyES() {
         <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>En la aplicación.</b> Estas etapas corresponden a los estados 3–9 del pipeline (Documentos verificados → Inscripción OPI): usa la checklist de cada estado para seguir traducciones, apostillas y envíos al Ministerio.</div>
       </section>
 
+      <section id="g-percorso-op" class="space-y-4">
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="route" class="h-5 w-5 text-indigo-500"></i>7. Inserción profesional y residencia: las dos vías operativas</h2>
+        <p class="text-sm leading-relaxed text-slate-600">La <b>Guía Operativa</b> del proyecto organiza el recorrido legal de cada candidato en torno a <b>dos decisiones</b>, ambas registradas en la app: con qué canal <b>reconocer el título</b> (Fase 1) y con qué canal obtener el <b>permiso de residencia</b> (Fase 2). El reconocimiento es la condición esencial y previa de todo el expediente migratorio: sin él la solicitud de entrada ni siquiera es válida.</p>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Fase 1 — Reconocimiento del título: trámite ordinario (1.A) o derogación regional (1.B)</h3>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2"></th><th class="px-3 py-2">1.A · Trámite Ordinario (Ministerio de Sanidad)</th><th class="px-3 py-2">1.B · Procedimiento Acelerado en Derogación (Región)</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Resultado</td><td class="px-3 py-2.5 text-slate-600">Decreto de Equivalencia + inscripción ordinaria en el colegio OPI</td><td class="px-3 py-2.5 text-slate-600">Inscripción en las listas especiales regionales (Art. 15 D.L. 34/2023)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Tiempos</td><td class="px-3 py-2.5 text-slate-600">Varios meses: los plazos ministeriales son la variable crítica</td><td class="px-3 py-2.5 text-slate-600">Ejercicio inmediato mientras avanza el trámite ministerial</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Validez</td><td class="px-3 py-2.5 text-slate-600"><b>Todo el territorio nacional</b>, estabilidad plena</td><td class="px-3 py-2.5 text-slate-600"><b>Solo la Región emisora</b>; régimen transitorio hasta el <b>31/12/2027</b></td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Trámites típicos</td><td class="px-3 py-2.5 text-slate-600">Currículum con carga horaria por materia, traducciones legalizadas/Apostilla, examen de idioma (mín. A2/B1), verificación deontológica</td><td class="px-3 py-2.5 text-slate-600">Título con traducción jurada, certificado de colegiación del país de origen, <b>Declaración de Valor</b> consular</td></tr>
+          </tbody>
+        </table></div>
+        <p class="text-sm leading-relaxed text-slate-600">Las prácticas regionales divergen: el <b>modelo Véneto</b> prevé la verificación directa e inmediata del título con responsabilidad exclusiva del empleador; el <b>modelo centralizado</b> (Piamonte, Umbría, Apulia) pasa por resoluciones regionales con control previo del ente regional o dictamen del SUI. En régimen de derogación la estructura sanitaria se convierte de hecho en ente certificador: el control preventivo de la documentación es una exigencia de cumplimiento, no solo logística.</p>
+        <div class="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-800"><b>Límite territorial.</b> La autorización en derogación vale solo en la Región que la emite: un enfermero autorizado en el Véneto <b>no puede</b> trasladarse a Lombardía sin repetir íntegramente el trámite. Estrategia recomendada: iniciar el trámite ministerial <b>en paralelo</b> a la derogación, para que el título valga en todo el país al terminar el régimen de emergencia.</div>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Fase 2 — Permiso de residencia: Art. 27 r-bis (2.A) o Tarjeta Azul UE (2.B)</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Ambos canales permiten la entrada <b>fuera de los cupos</b> del Decreto Flussi, pero con requisitos y beneficios distintos:</p>
+        <div class="overflow-hidden rounded-xl border border-slate-200"><table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"><tr><th class="px-3 py-2">Característica</th><th class="px-3 py-2">2.A · Art. 27 r-bis (Enfermeros)</th><th class="px-3 py-2">2.B · Tarjeta Azul UE (Art. 27-quater)</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 align-top">
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Ámbito</td><td class="px-3 py-2.5 text-slate-600">Solo enfermeros profesionales de estructuras sanitarias públicas o privadas acreditadas</td><td class="px-3 py-2.5 text-slate-600">Cualquier trabajador altamente cualificado</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Título</td><td class="px-3 py-2.5 text-slate-600">Grado en enfermería reconocido (o autorización regional transitoria hasta el 31/12/2027)</td><td class="px-3 py-2.5 text-slate-600">Grado universitario o cualificación superior, o 5 años de experiencia pertinente</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Salario mínimo</td><td class="px-3 py-2.5 text-slate-600">Tratamiento del convenio colectivo (CCNL)</td><td class="px-3 py-2.5 text-slate-600">CCNL y por encima de la media ISTAT (~<b>36.300 €</b> brutos/año)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Solicitud (portal ALI)</td><td class="px-3 py-2.5 text-slate-600"><b>Modelo O</b></td><td class="px-3 py-2.5 text-slate-600"><b>Módulo BC</b> — Nulla Osta en <b>30 días</b> (Ley 182/2025)</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Contrato</td><td class="px-3 py-2.5 text-slate-600">Temporal o indefinido</td><td class="px-3 py-2.5 text-slate-600">Duración mínima <b>6 meses</b>, al menos <b>20 horas/semana</b></td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Movilidad UE</td><td class="px-3 py-2.5 text-slate-600">No prevista específicamente</td><td class="px-3 py-2.5 text-slate-600">Facilitada tras 12 meses de residencia</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Reagrupación familiar</td><td class="px-3 py-2.5 text-slate-600">Ordinaria (tras 1 año)</td><td class="px-3 py-2.5 text-slate-600">Inmediata y facilitada</td></tr>
+            <tr><td class="px-3 py-2.5 font-medium text-slate-700">Pérdida del empleo</td><td class="px-3 py-2.5 text-slate-600">Permiso por búsqueda de empleo ≥ 1 año, sin cambio de función</td><td class="px-3 py-2.5 text-slate-600">Protección similar + trabajo autónomo en paralelo</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 class="pt-2 text-base font-bold text-slate-800">Plazos que no se pueden fallar</h3>
+        <ul class="prose-list ml-5 list-disc text-sm leading-relaxed text-slate-600">
+          <li><b>48 horas</b> desde la entrada: Declaración de Hospitalidad / <i>Cessione di Fabbricato</i> presentada por quien aloja al trabajador.</li>
+          <li><b>8 días</b> desde la entrada (r-bis): firma del Contrato de Residencia en el SUI, retirada del kit postal Mod. 209, Acuerdo de Integración si la estancia supera los 365 días.</li>
+          <li><b>15 días</b> desde la entrada (Tarjeta Azul): firma del contrato de residencia en el SUI.</li>
+          <li><b>120–180 días</b> desde el Nulla Osta (Tarjeta Azul): solicitud del Visado D en el Consulado.</li>
+        </ul>
+        <p class="text-sm leading-relaxed text-slate-600">El <b>empleador</b> debe acreditar capacidad económica y conformidad logística: registro mercantil reciente (&lt; 6 meses), DURC en regla, idoneidad de la vivienda o contrato de alquiler registrado (alternativamente reserva de hotel/residence ≥ 1 mes en papel con membrete), contrato de servicios para las cooperativas, propuesta de contrato CCNL y compromiso escrito de los gastos de repatriación; la Tarjeta Azul añade la certificación de capacidad económica y el timbre fiscal de 16 €.</p>
+        <div class="rounded-xl border-l-4 border-indigo-400 bg-indigo-50 p-4 text-sm text-indigo-800"><b>En la app.</b> Cada expediente tiene la tarjeta <b>«Inserción Profesional &amp; Residencia»</b>: eliges el canal de la Fase 1 (1.A/1.B con Región emisora) y de la Fase 2 (2.A/2.B), marcas los trámites del trabajador y los documentos del empleador, y al introducir la fecha de entrada y la del Nulla Osta los <b>semáforos calculan automáticamente los plazos legales</b> (48 horas, 8/15 días, 180 días).</div>
+      </section>
+
       <section id="g-lavoro" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="briefcase" class="h-5 w-5 text-indigo-500"></i>7. Entrada y trabajo en Italia: permisos que habilitan para trabajar</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="briefcase" class="h-5 w-5 text-indigo-500"></i>8. Entrada y trabajo en Italia: permisos que habilitan para trabajar</h2>
         <p class="text-sm leading-relaxed text-slate-600">Para trabajar en Italia, el ciudadano extranjero debe poseer un permiso de residencia que <b>habilite para trabajar</b>; el D.Lgs. 40/2014 configuró el "permiso único de trabajo" en dichos títulos.${fn(6)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Los permisos por turismo, negocios o justicia <b>no habilitan en ningún caso para trabajar</b> y no son convertibles en permisos de trabajo; los permisos que sí habilitan pueden convertirse al vencimiento si se cumplen los requisitos.${fn(6)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Para los enfermeros se aplican los permisos por trabajo por cuenta ajena ligados a la actividad de enfermería en estructuras sanitarias, con reglas de renovación vinculadas al mantenimiento de la cualificación y de la relación laboral por la que se expidió la autorización.${fn(7, 3)}</p>
       </section>
 
       <section id="g-documenti-rd" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>8. Documentación a preparar en la República Dominicana</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="files" class="h-5 w-5 text-indigo-500"></i>9. Documentación a preparar en la República Dominicana</h2>
         <p class="text-sm leading-relaxed text-slate-600">Para la fase consular y para el reconocimiento del título, los documentos dominicanos deben en general <b>traducirse</b> al italiano o al inglés por traductores jurados y <b>legalizarse mediante apostilla de La Haya</b>; esto vale para certificados penales, títulos de estudio, certificados médicos y otros actos oficiales.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Los <b>certificados de antecedentes penales</b> deben apostillarse y traducirse; para los visados de trabajo a menudo se exige también un <b>certificado médico</b> de buena salud y documentos que acrediten la ausencia de impedimentos para ejercer la profesión.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">La carta de solicitud de visado, la invitación de la empresa italiana y, en su caso, la resolución del Ministerio de Trabajo dominicano (certificado <b>SIRLA</b>) pueden ser necesarias para algunos tipos de visado de trabajo.${fn(9, 5)}</p>
       </section>
 
       <section id="g-diritto-rd" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="globe" class="h-5 w-5 text-indigo-500"></i>9. Derecho dominicano y movilidad internacional</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="globe" class="h-5 w-5 text-indigo-500"></i>10. Derecho dominicano y movilidad internacional</h2>
         <p class="text-sm leading-relaxed text-slate-600">Las fuentes sobre visados y permisos de trabajo en la República Dominicana describen las categorías de visado (turismo, negocios, trabajo) y sus requisitos; estas reglas inciden sobre todo en la fase de salida del país y en la regularidad de los documentos a presentar ante la autoridad italiana.${fn(9, 5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Los ciudadanos italianos no necesitan visado turístico para entrar en la República Dominicana <b>hasta 60 días</b> — dato útil si se prevén fases de formación o selección realizadas allí con personal italiano.${fn(5)}</p>
         <p class="text-sm leading-relaxed text-slate-600">La República Dominicana pertenece al grupo de países <b>ACP</b> con acuerdos económicos con la UE: circunstancia relevante más para el comercio que para la inmigración, pero que puede generar documentación aduanera particular (documento EUR.1) para movimientos de mercancías.${fn(5)}</p>
       </section>
 
       <section id="g-privacy" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="shield-check" class="h-5 w-5 text-indigo-500"></i>10. Protección de datos personales (Italia y República Dominicana)</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="shield-check" class="h-5 w-5 text-indigo-500"></i>11. Protección de datos personales (Italia y República Dominicana)</h2>
         <p class="text-sm leading-relaxed text-slate-600">La aplicación recoge en la República Dominicana los datos personales, documentos de identidad y títulos profesionales de los candidatos, y luego los trata y transmite en Italia a personal de RR.HH. y estructuras sanitarias: se aplican, pues, <b>de forma acumulativa</b>, el régimen dominicano de protección de datos (donde los datos se originan) y el italiano/europeo (donde se tratan y reciben).${fn(10, 12)}</p>
         <h3 class="pt-2 text-base font-bold text-slate-800">República Dominicana: la Ley 172-13</h3>
         <p class="text-sm leading-relaxed text-slate-600">La <b>Ley 172-13</b> del 13 de diciembre de 2013 (fundamentada en el art. 44 de la Constitución dominicana) protege de forma integral los datos personales contenidos en archivos, registros y bancos de datos públicos o privados. Establece los principios de <b>legalidad, calidad, información, consentimiento, seguridad y confidencialidad</b> y reconoce los llamados <b>derechos ARCO</b> — acceso, rectificación, cancelación y oposición —, ejercitables de forma independiente entre sí, además de la acción judicial de <b>habeas data</b> para conocer, acceder y corregir los propios datos.${fn(10, 11)}</p>
@@ -447,7 +582,7 @@ function guideBodyES() {
       </section>
 
       <section id="g-riferimenti" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>11. Referencias operativas y consejos prácticos</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="list-checks" class="h-5 w-5 text-indigo-500"></i>12. Referencias operativas y consejos prácticos</h2>
         <p class="text-sm leading-relaxed text-slate-600">Para la parte italiana, las fuentes primarias de referencia operativa son:</p>
         <ul class="prose-list ml-5 list-disc text-sm leading-relaxed text-slate-600">
           <li>La web del <b>Ministerio de Salud</b>, sección de reconocimiento de títulos sanitarios, con el formulario D2-1 INF e instrucciones detalladas.${fn(4)}</li>
@@ -459,12 +594,12 @@ function guideBodyES() {
       </section>
 
       <section id="g-conclusioni" class="space-y-4">
-        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="flag" class="h-5 w-5 text-indigo-500"></i>12. Conclusiones</h2>
+        <h2 class="flex items-center gap-2 text-xl font-extrabold text-slate-900"><i data-lucide="flag" class="h-5 w-5 text-indigo-500"></i>13. Conclusiones</h2>
         <p class="text-sm leading-relaxed text-slate-600">El traslado exige coordinar <b>tres planos</b>: reconocimiento del título ante el Ministerio de Salud, procedimiento de autorización y visado de trabajo específico para enfermeros, y posterior expedición y renovación del permiso de residencia, atendiendo a las normas especiales que protegen a esta categoría.${fn(1, 3, 2, 4)}</p>
         <p class="text-sm leading-relaxed text-slate-600">La correcta preparación de la documentación dominicana (traducciones juradas, apostillas, certificados penales y médicos) y el respeto de los plazos administrativos (cuatro meses para el reconocimiento, plazos para solicitar el permiso tras la entrada) son elementos centrales de un proyecto de migración profesional fluido y conforme.${fn(8, 5, 4)}</p>
         <p class="text-sm leading-relaxed text-slate-600">Recurrir a asesores expertos en derecho de inmigración italiano y dominicano, y el diálogo directo con las instituciones competentes (Ministerio de Salud, Ventanilla Única de Inmigración, embajada italiana en RD), ayuda a gestionar casos particulares, medidas compensatorias y controversias sobre plazos o denegaciones.</p>
       </section>
-${refsHtml('13. Fuentes y referencias', 'Las notas numeradas del texto remiten a estas fuentes (enlaces externos, se abren en una pestaña nueva; en su mayoría en italiano).')}`;
+${refsHtml('14. Fuentes y referencias', 'Las notas numeradas del texto remiten a estas fuentes (enlaces externos, se abren en una pestaña nueva; en su mayoría en italiano).')}`;
 }
 
 const GUIDE_BODY = { it: guideBodyIT, en: guideBodyEN, es: guideBodyES };

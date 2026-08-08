@@ -7,7 +7,7 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 import { createIcons, icons as lucideIcons } from 'lucide';
-import { STEP_I18N, CHECKLIST_I18N, I18N } from './i18n-data.js';
+import { STEP_I18N, CHECKLIST_I18N, I18N, LEGAL_I18N } from './i18n-data.js';
 import { guideToc, guideBody } from './guide-content.js';
 // Hashed by Vite: replacing the logo file changes the URL, so no cache (SW or browser) can serve a stale copy.
 // The SVG is itself a rounded indigo tile, so it renders directly without a white backing box.
@@ -135,6 +135,34 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   // required document is uploaded AND approved.
   const STEP_REQUIRES_ALL_DOCS_APPROVED = 2;
 
+  // ---------- Legal path (Guida Operativa: inserimento professionale & soggiorno) ----------
+  // Per-candidate regulatory dossier, independent from the 9-phase pipeline: which channel
+  // is used for qualification recognition (1.A ordinary / 1.B regional derogation) and for
+  // the residence permit (2.A Art. 27 r-bis / 2.B EU Blue Card), each with its checklist.
+  // It never gates phase advancement — it tracks the legal file alongside the operations.
+  const LEGAL_REC_ROUTES = ['ordinary', 'derogation'];
+  const LEGAL_PERM_ROUTES = ['rbis', 'bluecard'];
+  // Statutory deadlines (from the Guida Operativa): days from entry to the hospitality
+  // declaration and to the SUI residence contract, days from the Nulla Osta to the visa.
+  const LEGAL_DL = { hospDays: 2, suiDays: { rbis: 8, bluecard: 15 }, visaDays: 180 };
+  // Checklist indexes that mark a deadline as fulfilled (indexes into LEGAL_I18N checks).
+  const LEGAL_DL_IDX = { rbisHosp: 5, rbisSui: 6, bluecardVisa: 3, bluecardSui: 5 };
+  function legalDict() { return LEGAL_I18N[LANG] || LEGAL_I18N.it; }
+  function legalRoute(key) { return legalDict().routes[key] || LEGAL_I18N.it.routes[key]; }
+  function legalRouteTag(key) { const r = legalRoute(key); return r ? r.code + ' — ' + r.name : key; }
+  function legalCheckLabels(key) { const d = legalDict(); return d.checks[key] || LEGAL_I18N.it.checks[key] || []; }
+  function defaultLegalPath() {
+    return { recognitionRoute: '', derogationRegion: '', permitRoute: '', entryDate: '', nullaOstaDate: '', checks: {} };
+  }
+  // Flags are stored by index per route key; the array is padded lazily so dictionary
+  // growth in later versions never crashes older saved states.
+  function legalFlags(lp, key) {
+    const len = (LEGAL_I18N.it.checks[key] || []).length;
+    if (!Array.isArray(lp.checks[key])) lp.checks[key] = [];
+    while (lp.checks[key].length < len) lp.checks[key].push(false);
+    return lp.checks[key];
+  }
+
   // Status badge metadata (colors fixed; labels localized via i18n).
   const STATUS_CLS = {
     'Missing Docs':         'bg-rose-100 text-rose-700 ring-rose-200',
@@ -236,6 +264,12 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         2: [true, false, false, false, false, false, false], // titles uploaded; translation/legalisation still missing
       }),
       relocation: { flight: null, housing: null, tutor: null, contractStatus: 'Non avviato' },
+      // Regulatory dossier: regional derogation chosen (Veneto), permit channel still open.
+      legalPath: {
+        recognitionRoute: 'derogation', derogationRegion: 'Veneto', permitRoute: '',
+        entryDate: '', nullaOstaDate: '',
+        checks: { derogation: [true, true, false, false, false, false] },
+      },
       logs: [
         { id: uid(), at: isoMinutesAgo(60 * 24 * 74), type: 'system', author: 'Sistema', text: 'Candidata acquisita e profilo creato.' },
         { id: uid(), at: isoMinutesAgo(60 * 24 * 80), type: 'note', author: 'Dott.ssa Ferraro', text: 'Diploma e certificato professionale verificati con esito positivo.' },
@@ -274,6 +308,17 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         7: [true, false, false], // facility request received, matching in progress
       }),
       relocation: { flight: 'AZ 681 · SDQ → MXP · arrivato ' + formatDate(isoDaysAgo(12)), housing: 'Alloggio temporaneo, Via Altinate 45, Padova', tutor: null, contractStatus: 'Pre-contratto firmato' },
+      // Regulatory dossier: derogation done in Veneto, Art. 27 r-bis permit in progress
+      // (entered 12 days ago: hospitality + SUI contract already fulfilled in time).
+      legalPath: {
+        recognitionRoute: 'derogation', derogationRegion: 'Veneto', permitRoute: 'rbis',
+        entryDate: isoDaysAgo(12), nullaOstaDate: isoDaysAgo(40),
+        checks: {
+          derogation: [true, true, true, true, true, true],
+          rbis: [true, true, true, true, true, true, true, true, false, false],
+          rbis_emp: [true, true, true, false, true, true],
+        },
+      },
       logs: [
         { id: uid(), at: isoMinutesAgo(60 * 24 * 40), type: 'system', author: 'Sistema', text: 'Formazione «Italia in tasca» completata. Visto e iscrizione OPI ottenuti.' },
         { id: uid(), at: isoMinutesAgo(60 * 24 * 12), type: 'note', author: 'Dott. Bianchi', text: 'Arrivato in Italia: accoglienza in aeroporto e trasferimento in alloggio completati.' },
@@ -312,6 +357,16 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         housing: 'Foresteria aziendale, Via Giustiniani 12, Padova',
         tutor: 'Coord. Inf. Laura Marchetti',
         contractStatus: 'Contratto a tempo indeterminato attivo',
+      },
+      // Regulatory dossier fully closed: ordinary ministerial route + Art. 27 r-bis permit.
+      legalPath: {
+        recognitionRoute: 'ordinary', derogationRegion: '', permitRoute: 'rbis',
+        entryDate: isoDaysAgo(85), nullaOstaDate: isoDaysAgo(150),
+        checks: {
+          ordinary: [true, true, true, true, true, true, true],
+          rbis: [true, true, true, true, true, true, true, true, true, true],
+          rbis_emp: [true, true, true, true, true, true],
+        },
       },
       logs: [
         { id: uid(), at: isoMinutesAgo(60 * 24 * 42), type: 'system', author: 'Sistema', text: 'Iscrizione OPI completata.' },
@@ -489,6 +544,15 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       if (n.origin) { if (!n.birthPlace) n.birthPlace = n.origin; delete n.origin; }
       if (n.privacyConsent === undefined) n.privacyConsent = false;
       if (n.privacyConsentDate === undefined) n.privacyConsentDate = null;
+      // Legal path (recognition + residence-permit channels) added with the Guida Operativa.
+      if (!n.legalPath || typeof n.legalPath !== 'object') n.legalPath = defaultLegalPath();
+      else {
+        const lp = n.legalPath;
+        ['recognitionRoute', 'derogationRegion', 'permitRoute', 'entryDate', 'nullaOstaDate'].forEach((k) => { if (typeof lp[k] !== 'string') lp[k] = ''; });
+        if (LEGAL_REC_ROUTES.indexOf(lp.recognitionRoute) < 0) lp.recognitionRoute = '';
+        if (LEGAL_PERM_ROUTES.indexOf(lp.permitRoute) < 0) lp.permitRoute = '';
+        if (!lp.checks || typeof lp.checks !== 'object' || Array.isArray(lp.checks)) lp.checks = {};
+      }
       if (!Array.isArray(n.documents)) n.documents = [];
       const docNames = n.documents.map((d) => (d.name || '').toLowerCase());
       PERSONAL_DOC_TYPES.forEach((d) => {
@@ -1184,6 +1248,36 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
     commit();
   }
 
+  // ---------- Legal path actions (recognition / permit channels & their checklists) ----------
+  function nurseLegal(n) { if (!n.legalPath || typeof n.legalPath !== 'object') n.legalPath = defaultLegalPath(); return n.legalPath; }
+  function setLegalRoute(nurseId, group, value) {
+    const n = getNurse(nurseId); if (!n) return; // stale DOM: candidate removed by another operator
+    const valid = group === 'rec' ? LEGAL_REC_ROUTES : LEGAL_PERM_ROUTES;
+    if (valid.indexOf(value) < 0) return;
+    const lp = nurseLegal(n);
+    const field = group === 'rec' ? 'recognitionRoute' : 'permitRoute';
+    const next = lp[field] === value ? '' : value; // clicking the active card deselects it
+    lp[field] = next;
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    pushLog(n, 'system', actorName(), t(next ? 'log_lp_route' : 'log_lp_route_off', { x: legalRouteTag(value) }));
+    commit();
+  }
+  function toggleLegalCheck(nurseId, routeKey, idx) {
+    const n = getNurse(nurseId); if (!n) return;
+    const arr = legalFlags(nurseLegal(n), routeKey);
+    if (!(idx >= 0 && idx < arr.length)) return;
+    arr[idx] = !arr[idx];
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+  function setLegalField(nurseId, field, value) {
+    if (['derogationRegion', 'entryDate', 'nullaOstaDate'].indexOf(field) < 0) return;
+    const n = getNurse(nurseId); if (!n) return;
+    nurseLegal(n)[field] = (value || '').trim();
+    n.lastUpdate = new Date().toISOString().slice(0, 10);
+    commit();
+  }
+
   function advanceStatus(nurseId) {
     const n = getNurse(nurseId); if (!n) return; // stale DOM: candidate removed by another operator
     if (!canOperatePhase(n.currentStep)) return; // the other team's phase
@@ -1409,6 +1503,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       documents: defaultRequiredDocs(),
       checklist: makeChecklist({ __current: 1 }),
       relocation: { flight: null, housing: null, tutor: null, contractStatus: t('contract_none') },
+      legalPath: defaultLegalPath(),
       logs: [{ id: uid(), at: new Date().toISOString(), type: 'system', author: actorName(), text: t('log_nurse_created') }],
     };
     state.nurses.unshift(nurse);
@@ -2338,6 +2433,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       sec(t('f_status'), tbl(
         row(t('sheet_phase'), fase) + row(t('f_privacy'), n.privacyConsent ? t('privacy_given', { d: n.privacyConsentDate ? formatDate(n.privacyConsentDate) : '—' }) : t('privacy_none')) +
         row(t('f_last'), n.lastUpdate ? formatDate(n.lastUpdate) : ''))) +
+      sec(t('lp_title'), tbl(
+        row(t('lp_rec_title'), nurseLegal(n).recognitionRoute ? legalRouteTag(nurseLegal(n).recognitionRoute) + (nurseLegal(n).recognitionRoute === 'derogation' && nurseLegal(n).derogationRegion ? ' · ' + nurseLegal(n).derogationRegion : '') : '') +
+        row(t('lp_perm_title'), nurseLegal(n).permitRoute ? legalRouteTag(nurseLegal(n).permitRoute) : '') +
+        row(t('lp_entry'), nurseLegal(n).entryDate ? formatDate(nurseLegal(n).entryDate) : ''))) +
       sec(t('docs_title'), tbl('<thead><tr class="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400"><th class="pb-1 pr-3">' + t('th_document') + '</th><th class="pb-1 pr-3">' + t('th_status') + '</th><th class="pb-1">' + t('sheet_validity') + '</th></tr></thead><tbody>' + docRows + '</tbody>')) +
       sec(t('log_title'), tbl('<tbody>' + (logRows || '') + '</tbody>')) +
     '</div>';
@@ -2511,6 +2610,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
           <p class="flex items-center gap-2 text-sm font-bold text-emerald-800"><i data-lucide="sparkles" class="h-4 w-4"></i>Novità di questa versione</p>
           <ul class="prose-list mt-2 ml-5 list-disc text-sm text-emerald-900/80">
+            <li><b>Inserimento Professionale &amp; Soggiorno:</b> nuova card nella pratica per il percorso normativo — canali di riconoscimento del titolo (1.A/1.B) e di permesso di soggiorno (2.A r-bis / 2.B Carta Blu UE), checklist dedicate e semafori automatici sulle scadenze di legge (§5.5).</li>
             <li><b>Salvataggio in tempo reale con indicatore di stato</b> nell'header (☁︎ Salvato / Salvataggio… / NON salvato / Offline): con più operatori sullo stesso archivio, le modifiche di ciascuno arrivano subito agli altri e un avviso segnala quando il salvataggio sul cloud non riesce (§8).</li>
             <li><b>Avvisi sulle richieste di matching:</b> un messaggio compare quando una richiesta viene creata e quando l'organico è al completo (§6.1).</li>
             <li><b>Scheda candidato stampabile in PDF:</b> pulsante <b>Scheda</b> nell'intestazione del candidato (§7).</li>
@@ -2609,6 +2709,15 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           <li><b>Checklist:</b> attività obbligatorie della fase corrente, cambia a ogni avanzamento.</li>
           <li><b>Logistica &amp; Onboarding HR:</b> volo, alloggio, tutor, contratto.</li>
           <li><b>Log &amp; audit trail:</b> note, chiamate e avvisi con data e autore.</li>
+        </ul>
+        <h3 class="pt-2 text-base font-bold text-slate-800">5.5 · Inserimento Professionale &amp; Soggiorno (percorso normativo)</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Sotto documenti e checklist, ogni pratica ha la card del <b>percorso normativo</b>: il fascicolo legale del candidato secondo la Guida Operativa, indipendente dalle 9 fasi (non blocca mai «Avanza Fase»).</p>
+        <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
+          <li><b>Fase 1 · Riconoscimento del Titolo:</b> scegli il canale toccando la scheda <b>1.A Iter Ordinario</b> (Ministero della Salute) o <b>1.B Deroga Regionale</b>. Con la deroga compaiono il campo <b>Regione emittente</b> e l'avviso sul <b>limite territoriale</b> (l'autorizzazione vale solo in quella Regione, fino al 31/12/2027).</li>
+          <li><b>Fase 2 · Permesso di Soggiorno:</b> scegli tra <b>2.A Art. 27 r-bis</b> (infermieri) e <b>2.B Carta Blu UE</b>; per ciascuno vedi i requisiti chiave (per la Carta Blu: RAL ~36.300 €, contratto ≥ 6 mesi, ≥ 20 ore/settimana).</li>
+          <li><b>Checklist doppie:</b> ogni canale ha l'<b>iter amministrativo</b> del lavoratore e i <b>documenti del datore di lavoro</b>; spunta le voci man mano, il badge in alto mostra il progresso totale.</li>
+          <li><b>Semafori scadenze:</b> inserisci la <b>data di ingresso in Italia</b> e la <b>data del Nulla Osta</b>: il sistema calcola Dichiarazione di Ospitalità (48 ore), Contratto di Soggiorno al SUI (8 giorni r-bis / 15 giorni Carta Blu) e Visto D (180 giorni dal Nulla Osta). Rosso = scaduto, ambra = entro 3 giorni, verde = adempiuto (si spegne spuntando la voce corrispondente della checklist).</li>
+          <li><b>Tracciabilità:</b> ogni cambio di canale finisce nel log della pratica e il riepilogo del percorso compare nella <b>Scheda</b> stampabile. Per il quadro giuridico completo vedi la guida <b>Normativa, sezione 7</b>.</li>
         </ul>
       </section>
 
@@ -2800,6 +2909,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
           <p class="flex items-center gap-2 text-sm font-bold text-emerald-800"><i data-lucide="sparkles" class="h-4 w-4"></i>What's new in this version</p>
           <ul class="prose-list mt-2 ml-5 list-disc text-sm text-emerald-900/80">
+            <li><b>Professional Placement &amp; Residence:</b> a new card in the case for the regulatory path — qualification-recognition channels (1.A/1.B) and residence-permit channels (2.A r-bis / 2.B EU Blue Card), dedicated checklists and automatic traffic lights on statutory deadlines (§5.5).</li>
             <li><b>Real-time saving with a status indicator</b> in the header (☁︎ Saved / Saving… / NOT saved / Offline): with several operators on the same archive, everyone's changes arrive at once and an alert flags when a cloud save fails (§8).</li>
             <li><b>Matching request alerts:</b> a message appears when a request is created and when it becomes fully staffed (§6.1).</li>
             <li><b>Printable candidate sheet (PDF):</b> the <b>Sheet</b> button in the candidate header (§7).</li>
@@ -2890,6 +3000,15 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           <li><b>Checklist:</b> mandatory tasks for the current phase, changing on each advance.</li>
           <li><b>Logistics &amp; HR Onboarding:</b> flight, housing, tutor, contract.</li>
           <li><b>Log &amp; audit trail:</b> notes, calls and alerts with date and author.</li>
+        </ul>
+        <h3 class="pt-2 text-base font-bold text-slate-800">5.5 · Professional Placement &amp; Residence (regulatory path)</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Below documents and checklist, every case carries the <b>regulatory path</b> card: the candidate's legal file per the Operating Guide, independent from the 9 phases (it never blocks "Advance Phase").</p>
+        <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
+          <li><b>Phase 1 · Qualification Recognition:</b> pick the channel by tapping <b>1.A Ordinary Route</b> (Ministry of Health) or <b>1.B Regional Derogation</b>. With the derogation you get the <b>Issuing Region</b> field and the <b>territorial-limit</b> warning (the authorisation is valid only in that Region, until 31/12/2027).</li>
+          <li><b>Phase 2 · Residence Permit:</b> choose between <b>2.A Art. 27 r-bis</b> (nurses) and <b>2.B EU Blue Card</b>; each shows its key requirements (Blue Card: ~€36,300 gross salary, contract ≥ 6 months, ≥ 20 hours/week).</li>
+          <li><b>Twin checklists:</b> each channel has the worker's <b>administrative process</b> and the <b>employer documents</b>; tick items as they complete, the badge at the top shows overall progress.</li>
+          <li><b>Deadline traffic lights:</b> enter the <b>date of entry into Italy</b> and the <b>Nulla Osta date</b>: the system computes the Hospitality Declaration (48 hours), the SUI Residence Contract (8 days r-bis / 15 days Blue Card) and the Type D visa (180 days from the clearance). Red = overdue, amber = within 3 days, green = fulfilled (cleared by ticking the matching checklist item).</li>
+          <li><b>Traceability:</b> every channel change is logged in the case history and the path summary appears on the printable <b>Sheet</b>. For the full legal picture see the <b>Regulations guide, section 7</b>.</li>
         </ul>
       </section>
 
@@ -3080,6 +3199,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
           <p class="flex items-center gap-2 text-sm font-bold text-emerald-800"><i data-lucide="sparkles" class="h-4 w-4"></i>Novedades de esta versión</p>
           <ul class="prose-list mt-2 ml-5 list-disc text-sm text-emerald-900/80">
+            <li><b>Inserción Profesional &amp; Residencia:</b> nueva tarjeta en el expediente para el recorrido normativo — canales de reconocimiento del título (1.A/1.B) y de permiso de residencia (2.A r-bis / 2.B Tarjeta Azul UE), checklists dedicadas y semáforos automáticos de los plazos legales (§5.5).</li>
             <li><b>Guardado en tiempo real con indicador de estado</b> en la cabecera (☁︎ Guardado / Guardando… / NO guardado / Sin conexión): con varios operadores en el mismo archivo, los cambios de cada uno llegan enseguida a los demás y un aviso señala cuando el guardado en la nube falla (§8).</li>
             <li><b>Avisos de solicitudes de matching:</b> aparece un mensaje cuando se crea una solicitud y cuando la plantilla se completa (§6.1).</li>
             <li><b>Ficha del candidato imprimible (PDF):</b> botón <b>Ficha</b> en la cabecera del candidato (§7).</li>
@@ -3170,6 +3290,15 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
           <li><b>Checklist:</b> tareas obligatorias de la fase actual, cambian en cada avance.</li>
           <li><b>Logística &amp; Onboarding RR.HH.:</b> vuelo, alojamiento, tutor, contrato.</li>
           <li><b>Registro y auditoría:</b> notas, llamadas y avisos con fecha y autor.</li>
+        </ul>
+        <h3 class="pt-2 text-base font-bold text-slate-800">5.5 · Inserción Profesional &amp; Residencia (recorrido normativo)</h3>
+        <p class="text-sm leading-relaxed text-slate-600">Debajo de documentos y checklist, cada expediente lleva la tarjeta del <b>recorrido normativo</b>: el dosier legal del candidato según la Guía Operativa, independiente de las 9 fases (nunca bloquea «Avanzar Fase»).</p>
+        <ul class="prose-list ml-5 list-disc text-sm text-slate-600">
+          <li><b>Fase 1 · Reconocimiento del Título:</b> elige el canal tocando <b>1.A Trámite Ordinario</b> (Ministerio de Sanidad) o <b>1.B Derogación Regional</b>. Con la derogación aparecen el campo <b>Región emisora</b> y el aviso del <b>límite territorial</b> (la autorización vale solo en esa Región, hasta el 31/12/2027).</li>
+          <li><b>Fase 2 · Permiso de Residencia:</b> elige entre <b>2.A Art. 27 r-bis</b> (enfermeros) y <b>2.B Tarjeta Azul UE</b>; cada uno muestra sus requisitos clave (Tarjeta Azul: ~36.300 € brutos, contrato ≥ 6 meses, ≥ 20 horas/semana).</li>
+          <li><b>Checklists dobles:</b> cada canal tiene el <b>trámite administrativo</b> del trabajador y los <b>documentos del empleador</b>; marca los puntos a medida que se completan, la insignia superior muestra el progreso total.</li>
+          <li><b>Semáforos de plazos:</b> introduce la <b>fecha de entrada en Italia</b> y la <b>fecha del Nulla Osta</b>: el sistema calcula la Declaración de Hospitalidad (48 horas), el Contrato de Residencia en el SUI (8 días r-bis / 15 días Tarjeta Azul) y el Visado D (180 días desde el Nulla Osta). Rojo = vencido, ámbar = dentro de 3 días, verde = cumplido (se apaga marcando el punto correspondiente de la checklist).</li>
+          <li><b>Trazabilidad:</b> cada cambio de canal queda en el registro del expediente y el resumen del recorrido aparece en la <b>Ficha</b> imprimible. Para el marco jurídico completo, ver la guía <b>Normativa, sección 7</b>.</li>
         </ul>
       </section>
 
@@ -3826,6 +3955,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
         documentManager(n) +
         checklistSection(n) +
       '</div>' +
+      legalPathCard(n) +
       '<div class="grid grid-cols-1 gap-5 xl:grid-cols-2">' +
         relocationCard(n) +
         communicationLog(n) +
@@ -4130,6 +4260,158 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       '<p class="mb-3 text-xs text-slate-400">' + t('checklist_sub', { state: escapeHtml(n.currentStep >= DONE_STEP ? t('state_done') : stepName(n.currentStep)) }) + '</p>' +
       lockedNote +
       '<div class="space-y-2">' + list + '</div>' +
+    '</div>';
+  }
+
+  // Statutory deadlines derived from the chosen permit channel + the tracked dates.
+  // done = the matching checklist item is ticked; due dates come straight from the guide
+  // (48h hospitality, 8/15 days SUI residence contract, 180 days visa from the Nulla Osta).
+  function legalDeadlines(n) {
+    const lp = nurseLegal(n); const out = [];
+    if (!lp.permitRoute) return out;
+    const addDays = (iso, days) => { const d = new Date(iso); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); };
+    if (lp.entryDate) {
+      if (lp.permitRoute === 'rbis') {
+        out.push({ label: t('lp_dl_hosp'), due: addDays(lp.entryDate, LEGAL_DL.hospDays), done: !!legalFlags(lp, 'rbis')[LEGAL_DL_IDX.rbisHosp] });
+        out.push({ label: t('lp_dl_sui', { n: LEGAL_DL.suiDays.rbis }), due: addDays(lp.entryDate, LEGAL_DL.suiDays.rbis), done: !!legalFlags(lp, 'rbis')[LEGAL_DL_IDX.rbisSui] });
+      } else {
+        out.push({ label: t('lp_dl_sui', { n: LEGAL_DL.suiDays.bluecard }), due: addDays(lp.entryDate, LEGAL_DL.suiDays.bluecard), done: !!legalFlags(lp, 'bluecard')[LEGAL_DL_IDX.bluecardSui] });
+      }
+    }
+    if (lp.permitRoute === 'bluecard' && lp.nullaOstaDate) {
+      out.push({ label: t('lp_dl_visa'), due: addDays(lp.nullaOstaDate, LEGAL_DL.visaDays), done: !!legalFlags(lp, 'bluecard')[LEGAL_DL_IDX.bluecardVisa] });
+    }
+    return out;
+  }
+
+  function legalPathCard(n) {
+    const lp = nurseLegal(n);
+    // Overall progress across the active checklists (chosen routes + employer docs).
+    const activeKeys = [];
+    if (lp.recognitionRoute) activeKeys.push(lp.recognitionRoute);
+    if (lp.permitRoute) activeKeys.push(lp.permitRoute, lp.permitRoute + '_emp');
+    let doneCount = 0, totCount = 0;
+    activeKeys.forEach((k) => { const fl = legalFlags(lp, k); totCount += fl.length; doneCount += fl.filter(Boolean).length; });
+
+    const routeBtn = (group, key, active) => {
+      const r = legalRoute(key);
+      return '<button data-action="legal-route" data-id="' + n.id + '" data-group="' + group + '" data-value="' + key + '" class="flex-1 rounded-xl border p-3 text-left transition ' +
+        (active ? 'border-indigo-300 bg-indigo-50/70 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50') + '">' +
+        '<div class="flex items-center gap-2">' +
+          '<span class="inline-flex h-6 shrink-0 items-center justify-center rounded-lg px-1.5 text-[11px] font-extrabold ' + (active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500') + '">' + r.code + '</span>' +
+          '<span class="text-xs font-bold leading-tight ' + (active ? 'text-indigo-700' : 'text-slate-700') + '">' + escapeHtml(r.name) + '</span>' +
+          (active ? '<i data-lucide="check-circle-2" class="ml-auto h-4 w-4 shrink-0 text-indigo-500"></i>' : '') +
+        '</div>' +
+        '<p class="mt-1.5 text-[11px] leading-relaxed text-slate-500">' + escapeHtml(r.desc) + '</p>' +
+      '</button>';
+    };
+    const reqChips = (key) => {
+      const r = legalRoute(key);
+      if (!r.reqs || !r.reqs.length) return '';
+      return '<div class="mt-3">' +
+        '<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">' + t('lp_requirements') + '</p>' +
+        '<div class="flex flex-wrap gap-1.5">' + r.reqs.map((x) =>
+          '<span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600"><i data-lucide="info" class="h-3 w-3 shrink-0 text-slate-400"></i>' + escapeHtml(x) + '</span>').join('') + '</div>' +
+      '</div>';
+    };
+    const checkList = (key, subtitle) => {
+      const labels = legalCheckLabels(key);
+      if (!labels.length) return '';
+      const flags = legalFlags(lp, key);
+      const done = flags.filter(Boolean).length;
+      return '<div class="mt-3">' +
+        '<p class="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">' +
+          '<i data-lucide="list-checks" class="h-3.5 w-3.5"></i>' + subtitle +
+          '<span class="ml-auto">' + done + '/' + labels.length + '</span></p>' +
+        '<div class="space-y-1.5">' +
+        labels.map((label, i) =>
+          '<label class="flex cursor-pointer items-start gap-2.5 rounded-lg border p-2 transition ' + (flags[i] ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-white hover:bg-slate-50') + '">' +
+            '<input type="checkbox" ' + (flags[i] ? 'checked ' : '') + 'data-action="legal-check" data-nurse="' + n.id + '" data-route="' + key + '" data-idx="' + i + '" class="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />' +
+            '<span class="text-xs leading-relaxed ' + (flags[i] ? 'text-slate-400 line-through' : 'text-slate-600') + '">' + escapeHtml(label) + '</span>' +
+          '</label>').join('') +
+        '</div>' +
+      '</div>';
+    };
+    const dateField = (field, label, value) =>
+      '<div>' +
+        '<label class="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">' + label + '</label>' +
+        '<input type="date" value="' + escapeHtml(value || '') + '" data-action="legal-field" data-nurse="' + n.id + '" data-field="' + field + '" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs outline-none transition focus:border-indigo-300 focus:bg-white" />' +
+      '</div>';
+    const emptyHint = '<p class="mt-3 rounded-lg border border-dashed border-slate-200 p-3 text-center text-xs text-slate-400">' + t('lp_none') + '</p>';
+
+    // ---- Phase 1: qualification recognition
+    let recBody = emptyHint;
+    if (lp.recognitionRoute) {
+      recBody = '';
+      if (lp.recognitionRoute === 'derogation') {
+        const regionLabel = lp.derogationRegion ? t('lp_region_in', { r: lp.derogationRegion }) : t('lp_region_generic');
+        recBody +=
+          '<div class="mt-3">' +
+            '<label class="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">' + t('lp_region') + '</label>' +
+            '<input type="text" value="' + escapeHtml(lp.derogationRegion) + '" placeholder="' + escapeHtml(t('lp_region_ph')) + '" data-action="legal-field" data-nurse="' + n.id + '" data-field="derogationRegion" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs outline-none transition focus:border-indigo-300 focus:bg-white" />' +
+          '</div>' +
+          '<div class="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-[11px] font-medium leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-200"><i data-lucide="alert-triangle" class="mt-0.5 h-3.5 w-3.5 shrink-0"></i><span>' + escapeHtml(t('lp_terr_warn', { r: regionLabel })) + '</span></div>' +
+          '<div class="mt-1.5 flex items-start gap-2 rounded-lg bg-sky-50 p-2.5 text-[11px] font-medium leading-relaxed text-sky-700 ring-1 ring-inset ring-sky-200"><i data-lucide="calendar-clock" class="mt-0.5 h-3.5 w-3.5 shrink-0"></i><span>' + escapeHtml(t('lp_derog_exp')) + '</span></div>';
+      }
+      recBody += reqChips(lp.recognitionRoute) + checkList(lp.recognitionRoute, t('lp_worker_steps'));
+    }
+
+    // ---- Phase 2: residence permit
+    let permBody = emptyHint;
+    if (lp.permitRoute) {
+      permBody =
+        '<div class="mt-3 grid gap-2 sm:grid-cols-2">' +
+          dateField('entryDate', t('lp_entry'), lp.entryDate) +
+          dateField('nullaOstaDate', t('lp_nullaosta'), lp.nullaOstaDate) +
+        '</div>' +
+        reqChips(lp.permitRoute) +
+        checkList(lp.permitRoute, t('lp_worker_steps')) +
+        checkList(lp.permitRoute + '_emp', t('lp_emp_docs'));
+    }
+
+    // ---- Deadline monitor (traffic-light chips)
+    const dlChip = (d) => {
+      let cls, icon, text;
+      if (d.done) { cls = 'bg-emerald-50 text-emerald-700 ring-emerald-200'; icon = 'check-circle-2'; text = t('lp_dl_done'); }
+      else {
+        const days = Math.floor((new Date(d.due) - today()) / 86400000);
+        if (days < 0) { cls = 'bg-rose-50 text-rose-700 ring-rose-200'; icon = 'alert-triangle'; text = t('lp_dl_overdue', { d: formatDate(d.due) }); }
+        else if (days <= 3) { cls = 'bg-amber-50 text-amber-700 ring-amber-200'; icon = 'clock'; text = t('lp_dl_due', { d: formatDate(d.due) }); }
+        else { cls = 'bg-white text-slate-600 ring-slate-200'; icon = 'calendar'; text = t('lp_dl_due', { d: formatDate(d.due) }); }
+      }
+      return '<span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ' + cls + '"><i data-lucide="' + icon + '" class="h-3.5 w-3.5 shrink-0"></i>' + escapeHtml(d.label) + ' · ' + text + '</span>';
+    };
+    let dlHtml = '';
+    if (lp.permitRoute) {
+      const dls = legalDeadlines(n);
+      dlHtml = '<div class="mt-4 rounded-xl border border-slate-100 bg-slate-50/60 p-3">' +
+        '<p class="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400"><i data-lucide="alarm-clock" class="h-3.5 w-3.5"></i>' + t('lp_deadlines') + '</p>' +
+        (dls.length ? '<div class="flex flex-wrap gap-2">' + dls.map(dlChip).join('') + '</div>' : '<p class="text-xs text-slate-400">' + t('lp_dl_hint') + '</p>') +
+      '</div>';
+    }
+
+    const secTitle = (txt) => '<p class="text-xs font-bold uppercase tracking-wide text-slate-500">' + txt + '</p>';
+    return '<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">' +
+      '<div class="mb-1 flex items-center gap-2">' +
+        '<i data-lucide="scale" class="h-5 w-5 text-indigo-500"></i>' +
+        '<h3 class="text-sm font-bold text-slate-900">' + t('lp_title') + '</h3>' +
+        (totCount ? '<span class="ml-auto rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200">' + t('lp_progress', { a: doneCount, b: totCount }) + '</span>' : '') +
+      '</div>' +
+      '<p class="mb-4 text-xs text-slate-400">' + t('lp_sub') + '</p>' +
+      '<div class="grid grid-cols-1 gap-5 xl:grid-cols-2">' +
+        '<div class="rounded-xl border border-slate-100 p-3.5">' + secTitle(t('lp_rec_title')) +
+          '<div class="mt-2 flex flex-col gap-2 sm:flex-row">' +
+            routeBtn('rec', 'ordinary', lp.recognitionRoute === 'ordinary') +
+            routeBtn('rec', 'derogation', lp.recognitionRoute === 'derogation') +
+          '</div>' + recBody +
+        '</div>' +
+        '<div class="rounded-xl border border-slate-100 p-3.5">' + secTitle(t('lp_perm_title')) +
+          '<div class="mt-2 flex flex-col gap-2 sm:flex-row">' +
+            routeBtn('perm', 'rbis', lp.permitRoute === 'rbis') +
+            routeBtn('perm', 'bluecard', lp.permitRoute === 'bluecard') +
+          '</div>' + permBody +
+        '</div>' +
+      '</div>' + dlHtml +
     '</div>';
   }
 
@@ -4514,6 +4796,7 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
       case 'open-edit-nurse': openNewNurseModal(t.getAttribute('data-id')); break;
       case 'open-relocation': openRelocationModal(t.getAttribute('data-id')); break;
       case 'save-relocation': saveRelocation(); break;
+      case 'legal-route': setLegalRoute(t.getAttribute('data-id'), t.getAttribute('data-group'), t.getAttribute('data-value')); break;
       case 'view-doc': openDocPreview(t.getAttribute('data-nurse'), t.getAttribute('data-doc')); break;
       case 'doc-filter': state.docFilter = t.getAttribute('data-filter'); saveState(); render(); break;
       case 'delete-nurse': deleteNurse(t.getAttribute('data-id')); break;
@@ -4590,6 +4873,10 @@ const lucide = { createIcons: (opts) => createIcons({ icons: lucideIcons, ...(op
   document.addEventListener('change', (e) => {
     const st = e.target.closest('[data-action="doc-status"]');
     if (st) { setDocStatus(st.getAttribute('data-nurse'), st.getAttribute('data-doc'), st.value); return; }
+    const lc = e.target.closest('[data-action="legal-check"]');
+    if (lc) { toggleLegalCheck(lc.getAttribute('data-nurse'), lc.getAttribute('data-route'), parseInt(lc.getAttribute('data-idx'), 10)); return; }
+    const lf = e.target.closest('[data-action="legal-field"]');
+    if (lf) { setLegalField(lf.getAttribute('data-nurse'), lf.getAttribute('data-field'), lf.value); return; }
     const t = e.target.closest('[data-action="toggle-check"]');
     if (t) {
       toggleChecklist(t.getAttribute('data-nurse'), parseInt(t.getAttribute('data-step'), 10), t.getAttribute('data-item'));
